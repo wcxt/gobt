@@ -21,5 +21,11 @@ func main() {
         return
     }
 
-    fmt.Printf(torrent.Announce)
+    uri, err := torrent.BuildTrackerURL()
+    if err != nil {
+        fmt.Println(err)
+        return
+    }
+
+    fmt.Println(uri.String())
 } 
