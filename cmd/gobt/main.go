@@ -21,11 +21,11 @@ func main() {
         return
     }
 
-    uri, err := torrent.BuildTrackerURL()
+    tres, err := torrent.GetPeers()
     if err != nil {
         fmt.Println(err)
         return
     }
 
-    fmt.Println(uri.String())
+    fmt.Printf("%v+\n", tres)
 } 
