@@ -25,10 +25,8 @@ func TestInfoHash(t *testing.T) {
     }
 }
 
-func TestGeneratePeerId(t *testing.T) {
-    tr := &Torrent{}
-
-    _, err := tr.GeneratePeerId()
+func TestRandomPeerId(t *testing.T) {
+    _, err := RandomPeerId()
 
     if err != nil {
         t.Fatalf("error = %s, want nil", err.Error())

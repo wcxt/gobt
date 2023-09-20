@@ -48,7 +48,7 @@ func (ti TorrentInfo) Hash() ([20]byte, error) {
 	return sha1.Sum(buf.Bytes()), nil
 }
 
-func (t *Torrent) GeneratePeerId() ([20]byte, error) {
+func RandomPeerId() ([20]byte, error) {
 	b := [20]byte{}
 	_, err := rand.Read(b[:])
 
@@ -69,13 +69,8 @@ func (t *Torrent) GetAvailablePort() int {
 	}
 }
 
-func (t *Torrent) BuildTrackerURL() (*url.URL, error) {
+func (t *Torrent) BuildTrackerURL(peerId [20]byte) (*url.URL, error) {
 	infoHash, err := t.Info.Hash()
-	if err != nil {
-		return nil, err
-	}
-
-	peerId, err := t.GeneratePeerId()
 	if err != nil {
 		return nil, err
 	}
@@ -110,22 +105,22 @@ type Peer struct {
 	Port   int    `bencode:"port"`
 }
 
-func (t *Torrent) GetPeers() (*TrackerResponse, error) {
-    uri, err := t.BuildTrackerURL()
-    if err != nil {
-        return nil, err
-    }
+func (t *Torrent) GetPeers(peerId [20]byte) (*TrackerResponse, error) {
+	uri, err := t.BuildTrackerURL(peerId)
+	if err != nil {
+		return nil, err
+	}
 
-    res, err := http.Get(uri.String())
-    if err != nil {
-        return nil, err
-    }
+	res, err := http.Get(uri.String())
+	if err != nil {
+		return nil, err
+	}
 
-    tres := &TrackerResponse{}
-    err = bencode.Unmarshal(res.Body, tres)
-    if err != nil {
-        return nil, err
-    }
-    
-    return tres, nil
+	tres := &TrackerResponse{}
+	err = bencode.Unmarshal(res.Body, tres)
+	if err != nil {
+		return nil, err
+	}
+
+	return tres, nil
 }
