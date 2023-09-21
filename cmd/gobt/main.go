@@ -42,7 +42,19 @@ func main() {
         fmt.Println(err)
         return
     }
+
+    hash, err := torrent.Info.Hash()
+    if err != nil {
+        fmt.Println(err)
+        return
+    }
     
+    err = client.Handshake(conn, hash, peerId)
+    if err != nil {
+        fmt.Println(err)
+        return
+    }
+
     conn.Close()
     fmt.Printf("%v+\n", tres)
 } 
