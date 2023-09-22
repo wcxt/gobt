@@ -36,8 +36,7 @@ func main() {
         return
     }
 
-    client := wire.Client{PeerId: peerId}
-    conn, err := client.NewConnection(net.JoinHostPort(tres.Peers[0].Ip, strconv.Itoa(tres.Peers[0].Port)))
+    conn, err := wire.Dial(net.JoinHostPort(tres.Peers[0].Ip, strconv.Itoa(tres.Peers[0].Port)))
     if err != nil {
         fmt.Println(err)
         return
@@ -49,11 +48,12 @@ func main() {
         return
     }
     
-    err = client.Handshake(conn, hash, peerId)
+    err = conn.Handshake(hash, peerId)
     if err != nil {
         fmt.Println(err)
         return
     }
+
 
     conn.Close()
     fmt.Printf("%v+\n", tres)
