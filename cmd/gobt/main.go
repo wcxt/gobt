@@ -54,7 +54,12 @@ func main() {
         return
     }
 
+    msg, err := conn.Recv()
+    if err != nil {
+        fmt.Println(err)
+        return
+    }
 
     conn.Close()
-    fmt.Printf("%v+\n", tres)
+    fmt.Printf("Received Message ID: %d", msg.ID)
 } 

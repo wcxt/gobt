@@ -27,6 +27,13 @@ type Message struct {
     Payload []byte
 }
 
+func NewBitfieldMessage(bf Bitfield) *Message {
+    return &Message{
+        ID: MessageBitfield,
+        Payload: bf,
+    }
+}
+
 func MarshalMessage(msg *Message) []byte {
     var buf bytes.Buffer
 
@@ -43,20 +50,40 @@ func MarshalMessage(msg *Message) []byte {
 }
 
 func UnmarshalMessage(r io.Reader) (*Message, error) {
-    var buf []byte
-
-    _, err := io.ReadFull(r, buf)
+    lenBuf := make([]byte, 4)
+    _, err := io.ReadFull(r, lenBuf)
     if err != nil && err != io.EOF {
         return nil, err
     }
 
-    msgLen := binary.BigEndian.Uint32(buf[0:4])
+    msgLen := binary.BigEndian.Uint32(lenBuf[0:4])
     if msgLen == 0 {
         return &Message{KeepAlive: true}, nil
     }
 
-    id := uint8(buf[4])
-    payload := buf[5:]
+    restBuf := make([]byte, msgLen)
+    _, err = io.ReadFull(r, restBuf)
+    if err != nil && err != io.EOF {
+        return nil, err
+    }
+
+    id := uint8(restBuf[0])
+    payload := restBuf[1:]
 
     return &Message{ID: MessageID(id), Payload: payload}, nil
+}
+
+type Bitfield []byte
+
+func (bf Bitfield) Set(i int) {
+    byteI := i / 8
+    bitI := i % 8
+    bf[byteI] |= 0b00000001 << bitI
+}
+
+func (bf Bitfield) Get(i int) bool {
+    byteI := i / 8
+    bitI := i % 8
+    val := int(bf[byteI] & (0b00000001 << bitI))
+    return val != 0
 }
