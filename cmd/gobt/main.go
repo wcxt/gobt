@@ -11,55 +11,49 @@ import (
 )
 
 func main() {
-    path := os.Args[1]
-    file, err := os.Open(path)
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
+	path := os.Args[1]
+	file, err := os.Open(path)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-    torrent, err := gobt.Parse(file)
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
+	torrent, err := gobt.Parse(file)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-    peerId, err := gobt.RandomPeerId()
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
+	peerId, err := gobt.RandomPeerId()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-    tres, err := torrent.GetPeers(peerId)
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
+	tres, err := torrent.GetPeers(peerId)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-    conn, err := wire.Dial(net.JoinHostPort(tres.Peers[0].Ip, strconv.Itoa(tres.Peers[0].Port)))
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
+	conn, err := wire.Dial(net.JoinHostPort(tres.Peers[0].Ip, strconv.Itoa(tres.Peers[0].Port)))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-    hash, err := torrent.Info.Hash()
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
-    
-    err = conn.Handshake(hash, peerId)
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
+	hash, err := torrent.Info.Hash()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-    msg, err := conn.Recv()
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
+	err = conn.Handshake(hash, peerId)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-    conn.Close()
-    fmt.Printf("Received Message ID: %d", msg.ID)
-} 
+    conn.Send(&wire.Message{ID: wire.MessageUnchoke})
+    conn.Send(&wire.Message{ID: wire.MessageInterested})
+}
