@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha1"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -123,4 +124,20 @@ func (t *Torrent) GetPeers(peerId [20]byte) (*TrackerResponse, error) {
 	}
 
 	return tres, nil
+}
+
+func (t *TorrentInfo) PiecesHashes() ([][20]byte, error) {
+    bytePieces := []byte(t.Pieces)
+    if len(bytePieces) % 20 != 0 {
+        return nil, errors.New("Incorrect length of pieces")
+    }
+
+    pHashLen := len(bytePieces) / 20
+    pHashes := make([][20]byte, pHashLen)
+
+    for i := range pHashes {
+        pHashes[i] = [20]byte(bytePieces[i:i+20])
+    }
+
+    return pHashes, nil
 }

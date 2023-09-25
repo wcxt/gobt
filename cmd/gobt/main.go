@@ -47,6 +47,12 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+    
+    hashes, err := torrent.Info.PiecesHashes()
+    if err != nil {
+        fmt.Println(err)
+        return
+    }
 
 	err = conn.Handshake(hash, peerId)
 	if err != nil {
@@ -54,6 +60,9 @@ func main() {
 		return
 	}
 
-    conn.Send(&wire.Message{ID: wire.MessageUnchoke})
-    conn.Send(&wire.Message{ID: wire.MessageInterested})
+    bitfield, err := conn.RecvBitfield()
+    if err != nil {
+		fmt.Println(err)
+		return
+    }
 }

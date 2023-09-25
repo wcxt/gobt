@@ -56,6 +56,17 @@ func (c *Conn) Recv() (*Message, error) {
      return UnmarshalMessage(c.conn)
 }
 
+func (c *Conn) RecvBitfield() (Bitfield, error) {
+    msg, err := c.Recv()
+    if err != nil {
+        return nil, err
+    }
+    if msg.ID != MessageBitfield {
+        return nil, errors.New("expected bitfield message")
+    }
+    return Bitfield(msg.Payload), nil
+}
+
 func (c *Conn) Close() error {
     return c.conn.Close()
 }
