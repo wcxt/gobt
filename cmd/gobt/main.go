@@ -12,13 +12,8 @@ import (
 
 func main() {
 	path := os.Args[1]
-	file, err := os.Open(path)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
 
-	torrent, err := gobt.Parse(file)
+	torrent, err := gobt.Open(path) 
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -30,39 +25,23 @@ func main() {
 		return
 	}
 
-	tres, err := torrent.GetPeers(peerId)
+	tres, err := torrent.RequestPeers(peerId)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	conn, err := wire.Dial(net.JoinHostPort(tres.Peers[0].Ip, strconv.Itoa(tres.Peers[0].Port)))
+	conn, err := wire.Dial(net.JoinHostPort(tres.Peers[0].IP, strconv.Itoa(tres.Peers[0].Port)))
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	hash, err := torrent.Info.Hash()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-    
-    hashes, err := torrent.Info.PiecesHashes()
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
-
-	err = conn.Handshake(hash, peerId)
+	err = conn.Handshake(torrent.Hash, peerId)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-    bitfield, err := conn.RecvBitfield()
-    if err != nil {
-		fmt.Println(err)
-		return
-    }
+    conn.Close()
 }

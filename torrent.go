@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -67,8 +66,9 @@ func (mid MetainfoDict) Hashes() ([][20]byte, error) {
 }
 
 type Torrent struct {
-	Hash   [20]byte
-	Hashes [][20]byte
+	Announce *url.URL
+	Hash     [20]byte
+	Hashes   [][20]byte
 
 	Downloaded int
 	Uploaded   int
@@ -86,10 +86,16 @@ func NewTorrentFromMetainfo(mi *Metainfo) (*Torrent, error) {
 		return nil, err
 	}
 
+	announce, err := url.Parse(mi.Announce)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Torrent{
-		Hash:   hash,
-		Hashes: hashes,
-		Size:   mi.Info.Length,
+		Announce: announce,
+		Hash:     hash,
+		Hashes:   hashes,
+		Size:     mi.Info.Length,
 	}, nil
 }
 
@@ -101,64 +107,29 @@ func Open(path string) (*Torrent, error) {
 
 	mi, err := UnmarshalMetainfo(file)
 	if err != nil {
-        return nil, err
+		return nil, err
 	}
 
 	return NewTorrentFromMetainfo(mi)
 }
 
-func RandomPeerId() ([20]byte, error) {
-	b := [20]byte{}
-	_, err := rand.Read(b[:])
-
-	return b, err
-}
-
-func (t *Metainfo) BuildTrackerURL(peerId [20]byte) (*url.URL, error) {
-	infoHash, err := t.Info.Hash()
-	if err != nil {
-		return nil, err
-	}
-
-	uri, err := url.Parse(t.Announce)
-	if err != nil {
-		return nil, err
-	}
-
+func (t Torrent) RequestPeers(peerId [20]byte) (*TrackerResponse, error) {
 	keys := url.Values{}
-	keys.Set("info_hash", string(infoHash[:]))
+	keys.Set("info_hash", string(t.Hash[:]))
 	keys.Set("peer_id", string(peerId[:]))
 	keys.Set("port", strconv.Itoa(DefaultPort))
-	keys.Set("uploaded", "0")
-	keys.Set("downloaded", "0")
-	keys.Set("left", strconv.Itoa(t.Info.Length))
+	keys.Set("uploaded", strconv.Itoa(t.Uploaded))
+	keys.Set("downloaded", strconv.Itoa(t.Downloaded))
+	keys.Set("left", strconv.Itoa(t.Size-t.Downloaded))
 
-	uri.RawQuery = keys.Encode()
+	t.Announce.RawQuery = keys.Encode()
 
-	return uri, err
-}
-
-type TrackerResponse struct {
-	Failure  string `bencode:"failure"`
-	Interval int    `bencode:"interval"`
-	Peers    []Peer `bencode:"peers"`
-}
-
-type Peer struct {
-	PeerId string `bencode:"peer id"`
-	Ip     string `bencode:"ip"`
-	Port   int    `bencode:"port"`
-}
-
-func (t *Metainfo) GetPeers(peerId [20]byte) (*TrackerResponse, error) {
-	uri, err := t.BuildTrackerURL(peerId)
+	res, err := http.Get(t.Announce.String())
 	if err != nil {
 		return nil, err
 	}
-
-	res, err := http.Get(uri.String())
-	if err != nil {
-		return nil, err
+	if res != nil {
+		defer res.Body.Close()
 	}
 
 	tres := &TrackerResponse{}
@@ -168,4 +139,23 @@ func (t *Metainfo) GetPeers(peerId [20]byte) (*TrackerResponse, error) {
 	}
 
 	return tres, nil
+}
+
+type TrackerResponse struct {
+	Failure  string        `bencode:"failure"`
+	Interval int           `bencode:"interval"`
+	Peers    []TrackerPeer `bencode:"peers"`
+}
+
+type TrackerPeer struct {
+	ID   string `bencode:"peer id"`
+	IP   string `bencode:"ip"`
+	Port int    `bencode:"port"`
+}
+
+func RandomPeerId() ([20]byte, error) {
+	b := [20]byte{}
+	_, err := rand.Read(b[:])
+
+	return b, err
 }
