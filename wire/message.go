@@ -44,8 +44,9 @@ func MarshalMessage(msg *Message) []byte {
 
 func UnmarshalMessage(r io.Reader) (*Message, error) {
 	buf := make([]byte, 4)
+    // Check out different ways of reading data for cases with EOF
 	_, err := io.ReadFull(r, buf)
-	if err != nil && err != io.EOF {
+	if err != nil {
 		return nil, err
 	}
 

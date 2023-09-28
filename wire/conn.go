@@ -64,6 +64,10 @@ func (c *Conn) Recv() (*Message, error) {
      return UnmarshalMessage(c.conn)
 }
 
+func (c *Conn) SendInterested() (int, error) {
+    return c.Send(&Message{ID: MessageInterested})
+}
+
 func (c *Conn) RecvBitfield() (Bitfield, error) {
     msg, err := c.Recv()
     if err != nil {
@@ -83,24 +87,6 @@ func (c *Conn) SendRequest(index, begin, length uint32) (int, error) {
     binary.Write(&buf, binary.BigEndian, length)
 
     return c.Send(&Message{ID: MessageRequest, Payload: buf.Bytes()}) 
-}
-
-func (c *Conn) RecvPiece() (*Block, error) {
-    msg, err := c.Recv()
-    if err != nil {
-        return nil, err
-    }
-    if msg.ID != MessagePiece {
-        return nil, errors.New("expected piece message")
-    }
-    if len(msg.Payload) < 8 {
-        return nil, errors.New("incorrect piece payload size")
-    }
-
-    index := binary.BigEndian.Uint32(msg.Payload[0:4])
-    begin := binary.BigEndian.Uint32(msg.Payload[4:8])
-
-    return &Block{Index: index, Offset: begin, Bytes: msg.Payload[8:]}, nil
 }
 
 func (c *Conn) Close() error {

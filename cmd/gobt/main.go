@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 	"os"
@@ -13,7 +14,7 @@ import (
 func main() {
 	path := os.Args[1]
 
-	torrent, err := gobt.Open(path) 
+	torrent, err := gobt.Open(path)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -43,32 +44,57 @@ func main() {
 		return
 	}
 
-    bitfield, err := conn.RecvBitfield()
-    if err != nil {
+	bitfield, err := conn.RecvBitfield()
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-    for i := range torrent.Hashes {
-
-    if !bitfield.Get(i) {
-        fmt.Println("Does not have piece: " + strconv.Itoa(i))
-        return
-    }
-
-    _, err = conn.SendRequest(0, 0, uint32(torrent.PieceLength))
-    if err != nil {
+	_, err = conn.SendInterested()
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-    block, err := conn.RecvPiece()
-    if err != nil {
-		fmt.Println(err)
+	if !bitfield.Get(0) {
+		fmt.Println("Does not have piece: " + strconv.Itoa(0))
 		return
 	}
 
-    fmt.Printf("%v+\n", block)
-    }
-    conn.Close()
+	for {
+		msg, err := conn.Recv()
+		if err != nil {
+            continue
+		}
+
+		fmt.Printf("%v+\n", msg)
+
+		if msg.KeepAlive {
+            continue
+		}
+
+		if msg.ID == wire.MessageChoke {
+			_, err = conn.SendInterested()
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+		} else if msg.ID == wire.MessageUnchoke {
+			_, err = conn.SendRequest(0, 0, uint32(2000))
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+		} else if msg.ID == wire.MessagePiece {
+            index := binary.BigEndian.Uint32(msg.Payload[0:4])
+            begin := binary.BigEndian.Uint32(msg.Payload[4:8])
+
+            b := &wire.Block{Index: index, Offset: begin, Bytes: msg.Payload[8:]}
+            fmt.Printf("GOT BLOCK: %v+\n", b)
+			break
+		}
+
+	}
+
+	conn.Close()
 }
