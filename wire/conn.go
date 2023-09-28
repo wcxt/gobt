@@ -42,9 +42,9 @@ func Dial(addr string) (*Conn, error) {
 
 func (c *Conn) Handshake(infoHash, peerId [20]byte) error {
 	hs := NewHandshake(infoHash, peerId)
-	c.conn.Write(MarshalHandshake(hs))
+	c.conn.Write(hs.Marshal())
 
-	hs, err := UnmarshalHandshake(c.conn)
+	hs, err := ReadHandshake(c.conn)
 	if err != nil {
 		return err
 	}
