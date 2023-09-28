@@ -1,12 +1,20 @@
 package wire
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"net"
 	"time"
 )
 
 const DefaultTimeout = 5 * time.Second
+
+type Block struct {
+    Index uint32
+    Offset uint32
+    Bytes []byte
+}
 
 type Conn struct {
     conn net.Conn
@@ -65,6 +73,34 @@ func (c *Conn) RecvBitfield() (Bitfield, error) {
         return nil, errors.New("expected bitfield message")
     }
     return Bitfield(msg.Payload), nil
+}
+
+func (c *Conn) SendRequest(index, begin, length uint32) (int, error) {
+    var buf bytes.Buffer
+
+    binary.Write(&buf, binary.BigEndian, index)
+    binary.Write(&buf, binary.BigEndian, begin)
+    binary.Write(&buf, binary.BigEndian, length)
+
+    return c.Send(&Message{ID: MessageRequest, Payload: buf.Bytes()}) 
+}
+
+func (c *Conn) RecvPiece() (*Block, error) {
+    msg, err := c.Recv()
+    if err != nil {
+        return nil, err
+    }
+    if msg.ID != MessagePiece {
+        return nil, errors.New("expected piece message")
+    }
+    if len(msg.Payload) < 8 {
+        return nil, errors.New("incorrect piece payload size")
+    }
+
+    index := binary.BigEndian.Uint32(msg.Payload[0:4])
+    begin := binary.BigEndian.Uint32(msg.Payload[4:8])
+
+    return &Block{Index: index, Offset: begin, Bytes: msg.Payload[8:]}, nil
 }
 
 func (c *Conn) Close() error {

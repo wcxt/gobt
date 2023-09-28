@@ -72,7 +72,9 @@ type Torrent struct {
 
 	Downloaded int
 	Uploaded   int
-	Size       int
+	Length     int
+
+	PieceLength int
 }
 
 func NewTorrentFromMetainfo(mi *Metainfo) (*Torrent, error) {
@@ -92,10 +94,11 @@ func NewTorrentFromMetainfo(mi *Metainfo) (*Torrent, error) {
 	}
 
 	return &Torrent{
-		Announce: announce,
-		Hash:     hash,
-		Hashes:   hashes,
-		Size:     mi.Info.Length,
+		Announce:    announce,
+		Hash:        hash,
+		Hashes:      hashes,
+		Length:      mi.Info.Length,
+		PieceLength: mi.Info.PieceLength,
 	}, nil
 }
 
@@ -120,7 +123,7 @@ func (t Torrent) RequestPeers(peerId [20]byte) (*TrackerResponse, error) {
 	keys.Set("port", strconv.Itoa(DefaultPort))
 	keys.Set("uploaded", strconv.Itoa(t.Uploaded))
 	keys.Set("downloaded", strconv.Itoa(t.Downloaded))
-	keys.Set("left", strconv.Itoa(t.Size-t.Downloaded))
+	keys.Set("left", strconv.Itoa(t.Length-t.Downloaded))
 
 	t.Announce.RawQuery = keys.Encode()
 

@@ -43,5 +43,32 @@ func main() {
 		return
 	}
 
+    bitfield, err := conn.RecvBitfield()
+    if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+    for i := range torrent.Hashes {
+
+    if !bitfield.Get(i) {
+        fmt.Println("Does not have piece: " + strconv.Itoa(i))
+        return
+    }
+
+    _, err = conn.SendRequest(0, 0, uint32(torrent.PieceLength))
+    if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+    block, err := conn.RecvPiece()
+    if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+    fmt.Printf("%v+\n", block)
+    }
     conn.Close()
 }

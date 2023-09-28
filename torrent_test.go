@@ -7,7 +7,7 @@ import (
 )
 
 func TestInfoHash(t *testing.T) {
-    ti := &TorrentInfo{
+    ti := &MetainfoDict{
        Name: "Sample",
        Length: 684356,
        PieceLength: 25789,
@@ -34,7 +34,7 @@ func TestRandomPeerId(t *testing.T) {
 }
 
 func TestGetAvailablePort(t *testing.T) {
-    tr := &Torrent{}
+    tr := &Metainfo{}
     
     t.Run("Open", func(t *testing.T) {
         port := tr.GetAvailablePort()
