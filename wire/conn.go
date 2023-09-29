@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net"
 	"time"
 )
@@ -57,26 +58,19 @@ func (c *Conn) Handshake(infoHash, peerId [20]byte) error {
 }
 
 func (c *Conn) Send(msg *Message) (int, error) {
-     return c.conn.Write(MarshalMessage(msg))
+    bt := MarshalMessage(msg)
+    fmt.Printf("SEND: Message{KeepAlive: %t, ID: %d}\n", msg.KeepAlive, msg.ID)
+    return c.conn.Write(bt)
 }
 
 func (c *Conn) Recv() (*Message, error) {
-     return UnmarshalMessage(c.conn)
+    msg, err := UnmarshalMessage(c.conn)
+    fmt.Printf("RECV: Message{KeepAlive: %t, ID: %d}\n", msg.KeepAlive, msg.ID)
+    return msg, err
 }
 
 func (c *Conn) SendInterested() (int, error) {
     return c.Send(&Message{ID: MessageInterested})
-}
-
-func (c *Conn) RecvBitfield() (Bitfield, error) {
-    msg, err := c.Recv()
-    if err != nil {
-        return nil, err
-    }
-    if msg.ID != MessageBitfield {
-        return nil, errors.New("expected bitfield message")
-    }
-    return Bitfield(msg.Payload), nil
 }
 
 func (c *Conn) SendRequest(index, begin, length uint32) (int, error) {

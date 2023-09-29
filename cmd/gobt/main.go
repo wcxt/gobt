@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"strconv"
@@ -37,6 +38,7 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+    defer conn.Close()
 
 	err = conn.Handshake(torrent.Hash, peerId)
 	if err != nil {
@@ -44,57 +46,56 @@ func main() {
 		return
 	}
 
-	bitfield, err := conn.RecvBitfield()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	_, err = conn.SendInterested()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	if !bitfield.Get(0) {
-		fmt.Println("Does not have piece: " + strconv.Itoa(0))
-		return
-	}
+    var bitfield wire.Bitfield
+    piece := []*wire.Block{}
+    pieceSize := 0
+    requestLength := 16000
+    nextOffset := uint32(0)
 
 	for {
-		msg, err := conn.Recv()
+        msg, err := conn.Recv()
 		if err != nil {
             continue
 		}
-
-		fmt.Printf("%v+\n", msg)
 
 		if msg.KeepAlive {
             continue
 		}
 
-		if msg.ID == wire.MessageChoke {
-			_, err = conn.SendInterested()
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
+        if msg.ID == wire.MessageBitfield {
+            bitfield = msg.Payload
+        } else if msg.ID == wire.MessageChoke {
+			conn.PeerChoking = true
 		} else if msg.ID == wire.MessageUnchoke {
-			_, err = conn.SendRequest(0, 0, uint32(2000))
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
+		    conn.PeerChoking = false	
 		} else if msg.ID == wire.MessagePiece {
             index := binary.BigEndian.Uint32(msg.Payload[0:4])
             begin := binary.BigEndian.Uint32(msg.Payload[4:8])
 
             b := &wire.Block{Index: index, Offset: begin, Bytes: msg.Payload[8:]}
-            fmt.Printf("GOT BLOCK: %v+\n", b)
-			break
+            fmt.Printf("BLOCK Received at: {Index: %d, Offset: %d, Length: %d}\n", b.Index, b.Offset, len(b.Bytes))
+            piece = append(piece, b)
+            pieceSize += int(requestLength)
 		}
 
-	}
+        if !conn.ClientInterested && bitfield != nil && bitfield.Get(0) {
+            _, err = conn.SendInterested()
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+            conn.ClientInterested = true
+        }
+        
+        if !conn.PeerChoking && conn.ClientInterested && pieceSize < torrent.PieceLength {
+            requestLength := math.Min(float64(torrent.PieceLength - pieceSize), float64(requestLength))
+            _, err = conn.SendRequest(0, uint32(nextOffset), uint32(requestLength))
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+            nextOffset += uint32(requestLength)
+        }
 
-	conn.Close()
+	}
 }
