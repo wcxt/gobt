@@ -27,24 +27,29 @@ type Message struct {
 	Payload   []byte
 }
 
-func MarshalMessage(msg *Message) []byte {
+func (msg *Message) Len() uint32 {
+    if msg.KeepAlive {
+        return 0
+    } 
+    return uint32(1 + len(msg.Payload))
+}
+
+func (msg *Message) Marshal() []byte {
 	var buf bytes.Buffer
+    binary.Write(&buf, binary.BigEndian, msg.Len())
 
 	if msg.KeepAlive {
-		binary.Write(&buf, binary.BigEndian, uint32(0))
 		return buf.Bytes()
 	}
 
-	binary.Write(&buf, binary.BigEndian, uint32(1+len(msg.Payload)))
 	buf.WriteByte(byte(msg.ID))
 	buf.Write(msg.Payload)
 
 	return buf.Bytes()
 }
 
-func UnmarshalMessage(r io.Reader) (*Message, error) {
+func ReadMessage(r io.Reader) (*Message, error) {
 	buf := make([]byte, 4)
-    // Check out different ways of reading data for cases with EOF
 	_, err := io.ReadFull(r, buf)
 	if err != nil {
 		return nil, err
@@ -61,7 +66,7 @@ func UnmarshalMessage(r io.Reader) (*Message, error) {
 		return nil, err
 	}
 
-	id := uint8(buf[0])
+	id := buf[0]
 	payload := buf[1:]
 
 	return &Message{ID: MessageID(id), Payload: payload}, nil

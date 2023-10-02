@@ -43,9 +43,6 @@ func (hs *Handshake) Marshal() []byte {
 func ReadHandshake(r io.Reader) (*Handshake, error) {
     buf := make([]byte, 49 + len(Pstr))
     _, err := io.ReadFull(r, buf)
-    if err == io.EOF {
-        return nil, fmt.Errorf("handshake read error: EOF")
-    }
     if err != nil {
         return nil, err
     }

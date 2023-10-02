@@ -58,13 +58,12 @@ func (c *Conn) Handshake(infoHash, peerId [20]byte) error {
 }
 
 func (c *Conn) Send(msg *Message) (int, error) {
-    bt := MarshalMessage(msg)
     fmt.Printf("SEND: Message{KeepAlive: %t, ID: %d}\n", msg.KeepAlive, msg.ID)
-    return c.conn.Write(bt)
+    return c.conn.Write(msg.Marshal())
 }
 
 func (c *Conn) Recv() (*Message, error) {
-    msg, err := UnmarshalMessage(c.conn)
+    msg, err := ReadMessage(c.conn)
     fmt.Printf("RECV: Message{KeepAlive: %t, ID: %d}\n", msg.KeepAlive, msg.ID)
     return msg, err
 }
