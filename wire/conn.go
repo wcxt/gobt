@@ -17,6 +17,12 @@ type Block struct {
     Bytes []byte
 }
 
+type Request struct {
+    Index uint32
+    Offset uint32
+    Length uint32
+}
+
 type Conn struct {
     conn net.Conn
 
@@ -72,12 +78,12 @@ func (c *Conn) SendInterested() (int, error) {
     return c.Send(&Message{ID: MessageInterested})
 }
 
-func (c *Conn) SendRequest(index, begin, length uint32) (int, error) {
+func (c *Conn) SendRequest(req *Request) (int, error) {
     var buf bytes.Buffer
 
-    binary.Write(&buf, binary.BigEndian, index)
-    binary.Write(&buf, binary.BigEndian, begin)
-    binary.Write(&buf, binary.BigEndian, length)
+    binary.Write(&buf, binary.BigEndian, req.Index)
+    binary.Write(&buf, binary.BigEndian, req.Offset)
+    binary.Write(&buf, binary.BigEndian, req.Length)
 
     return c.Send(&Message{ID: MessageRequest, Payload: buf.Bytes()}) 
 }
