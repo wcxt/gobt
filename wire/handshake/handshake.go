@@ -1,4 +1,4 @@
-package wire
+package handshake 
 
 import (
 	"bytes"
@@ -15,7 +15,7 @@ type Handshake struct {
     PeerId [20]byte
 }
 
-func NewHandshake(infoHash [20]byte, peerId [20]byte) *Handshake {
+func New(infoHash [20]byte, peerId [20]byte) *Handshake {
     return &Handshake{
         Pstr: Pstr,
         Reserved: [8]byte{0, 0, 0, 0, 0, 0, 0, 0}, 
@@ -28,19 +28,7 @@ func (hs *Handshake) PstrLen() uint8 {
     return uint8(len(hs.Pstr))
 }
 
-func (hs *Handshake) Marshal() []byte {
-    var buf bytes.Buffer
-
-    buf.WriteByte(byte(hs.PstrLen()))
-    buf.WriteString(hs.Pstr)
-    buf.Write(hs.Reserved[:])
-    buf.Write(hs.InfoHash[:])
-    buf.Write(hs.PeerId[:])
-    
-    return buf.Bytes()
-}
-
-func ReadHandshake(r io.Reader) (*Handshake, error) {
+func Read(r io.Reader) (*Handshake, error) {
     buf := make([]byte, 49 + len(Pstr))
     _, err := io.ReadFull(r, buf)
     if err != nil {
@@ -67,6 +55,18 @@ func ReadHandshake(r io.Reader) (*Handshake, error) {
         InfoHash: infoHash,
         PeerId: peerId,
     }, nil
+}
+
+func Write(w io.Writer, hs *Handshake) (int, error) {
+    var buf bytes.Buffer
+
+    buf.WriteByte(byte(hs.PstrLen()))
+    buf.WriteString(hs.Pstr)
+    buf.Write(hs.Reserved[:])
+    buf.Write(hs.InfoHash[:])
+    buf.Write(hs.PeerId[:])
+    
+    return w.Write(buf.Bytes())
 }
 
 

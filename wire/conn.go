@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"time"
+
+	"github.com/edwces/gobt/wire/handshake"
 )
 
 const DefaultTimeout = 5 * time.Second
@@ -48,12 +50,14 @@ func Dial(addr string) (*Conn, error) {
 }
 
 func (c *Conn) Handshake(infoHash, peerId [20]byte) error {
-	hs := NewHandshake(infoHash, peerId)
-	c.conn.Write(hs.Marshal())
+    _, err := handshake.Write(c.conn, handshake.New(infoHash, peerId))
+    if err != nil {
+        return err
+    }
 
-	hs, err := ReadHandshake(c.conn)
+	hs, err := handshake.Read(c.conn)
 	if err != nil {
-		return err
+        return err
 	}
 
 	if hs.InfoHash != infoHash {

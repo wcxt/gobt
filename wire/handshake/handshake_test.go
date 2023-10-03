@@ -1,21 +1,27 @@
-package wire
+package handshake_test
 
 import (
 	"bytes"
 	"reflect"
 	"testing"
+
+	"github.com/edwces/gobt/wire/handshake"
 )
 
-func TestMarshalHandshake(t *testing.T) {
+func TestWriteHandshake(t *testing.T) {
 	infoHash := [20]byte{20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}
 	peerId := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-	hs := NewHandshake(infoHash, peerId)
+	hs := handshake.New(infoHash, peerId)
 
-	got := hs.Marshal()
 	want := []byte{19, 66, 105, 116, 84, 111, 114, 114, 101, 110, 116, 32, 112, 114, 111, 116,
 		111, 99, 111, 108, 0, 0, 0, 0, 0, 0, 0, 0, 20, 19, 18, 17, 16, 15, 14, 13,
 		12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
 		13, 14, 15, 16, 17, 18, 19, 20}
+
+    var buf bytes.Buffer
+    handshake.Write(&buf, hs)
+    
+    got := buf.Bytes()
 
 	if !bytes.Equal(got, want) {
 		t.Fatalf("got %#v, want %#v", got, want)
@@ -25,7 +31,7 @@ func TestMarshalHandshake(t *testing.T) {
 func TestReadHandshake(t *testing.T) {
 	tests := map[string]struct {
 		input []byte
-		want  *Handshake
+		want  *handshake.Handshake
 		err   bool
 	}{
         "handshake": {
@@ -33,7 +39,7 @@ func TestReadHandshake(t *testing.T) {
 		            111, 99, 111, 108, 0, 0, 0, 0, 0, 0, 0, 0, 20, 19, 18, 17, 16, 15, 14, 13,
 		            12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
 		            13, 14, 15, 16, 17, 18, 19, 20},
-            want: NewHandshake(
+            want: handshake.New(
                     [20]byte{20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
                     [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
                 ),
@@ -62,7 +68,7 @@ func TestReadHandshake(t *testing.T) {
     for name, test := range tests {
         t.Run(name, func(t *testing.T) {
             r := bytes.NewReader(test.input)
-            hs, err := ReadHandshake(r)
+            hs, err := handshake.Read(r)
             if !test.err && err != nil {
                 t.Fatalf("got error: %s, want nil", err.Error())
             }
