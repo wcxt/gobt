@@ -1,29 +1,16 @@
 package wire
 
 import (
-	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
 	"time"
 
 	"github.com/edwces/gobt/wire/handshake"
+	"github.com/edwces/gobt/wire/message"
 )
 
 const DefaultTimeout = 5 * time.Second
-
-type Block struct {
-    Index uint32
-    Offset uint32
-    Bytes []byte
-}
-
-type Request struct {
-    Index uint32
-    Offset uint32
-    Length uint32
-}
 
 type Conn struct {
     conn net.Conn
@@ -67,29 +54,23 @@ func (c *Conn) Handshake(infoHash, peerId [20]byte) error {
 	return nil
 }
 
-func (c *Conn) Send(msg *Message) (int, error) {
+func (c *Conn) Send(msg *message.Message) (int, error) {
     fmt.Printf("SEND: Message{KeepAlive: %t, ID: %d}\n", msg.KeepAlive, msg.ID)
-    return c.conn.Write(msg.Marshal())
+    return message.Write(c.conn, msg) 
 }
 
-func (c *Conn) Recv() (*Message, error) {
-    msg, err := ReadMessage(c.conn)
+func (c *Conn) Recv() (*message.Message, error) {
+    msg, err := message.Read(c.conn)
     fmt.Printf("RECV: Message{KeepAlive: %t, ID: %d}\n", msg.KeepAlive, msg.ID)
     return msg, err
 }
 
 func (c *Conn) SendInterested() (int, error) {
-    return c.Send(&Message{ID: MessageInterested})
+    return message.Write(c.conn, &message.Message{ID: message.IDInterested})
 }
 
-func (c *Conn) SendRequest(req *Request) (int, error) {
-    var buf bytes.Buffer
-
-    binary.Write(&buf, binary.BigEndian, req.Index)
-    binary.Write(&buf, binary.BigEndian, req.Offset)
-    binary.Write(&buf, binary.BigEndian, req.Length)
-
-    return c.Send(&Message{ID: MessageRequest, Payload: buf.Bytes()}) 
+func (c *Conn) SendRequest(req message.Request) (int, error) {
+    return message.Write(c.conn, &message.Message{ID: message.IDRequest, Payload: message.NewRequestPayload(req)}) 
 }
 
 func (c *Conn) Close() error {
