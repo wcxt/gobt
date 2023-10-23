@@ -2,121 +2,154 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"net"
 	"os"
-	"strconv"
+	"time"
 
 	"github.com/edwces/gobt"
-	"github.com/edwces/gobt/wire"
-	"github.com/edwces/gobt/wire/message"
+	"github.com/edwces/gobt/handshake"
+	"github.com/edwces/gobt/message"
 )
 
 const RequestLength = 16000
 
 func main() {
 	path := os.Args[1]
-
-	torrent, err := gobt.Open(path)
+    
+    // Open the metainfo file
+	metainfo, err := gobt.Open(path)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	peerId, err := gobt.RandomPeerId()
-	if err != nil {
+    clientID, err := gobt.GenRandPeerID()
+    if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	tres, err := torrent.RequestPeers(peerId)
-	if err != nil {
+    hash, err := metainfo.Info.Hash()
+    if err != nil {
 		fmt.Println(err)
 		return
 	}
     
-    addr := net.JoinHostPort(tres.Peers[0].IP, strconv.Itoa(tres.Peers[0].Port))
-	peer, err := wire.Dial(addr, torrent.Hash, peerId)
-	if err != nil {
+    // Receive the peers from tracker
+    peers, err := gobt.GetAvailablePeers(metainfo.Announce, hash, clientID, metainfo.Info.Length)
+    if err != nil {
 		fmt.Println(err)
 		return
 	}
-    defer peer.Close()
-    
-    // Used for storing pieces that still have to be downloaded
-    pieces := torrent.Hashes
-    // Used for tracking pieces that are currently are downloading
-    downloading := [][20]byte{}
 
-    go func(){
-        for {
-            msg, err := peer.Recv() 
+    
+    missing := make(chan int, metainfo.Info.Length)
+    downloaded := make(chan []byte, metainfo.Info.Length)
+    
+    // Connect to peers
+    for _, peer := range peers {
+        go func(peer gobt.AnnouncePeer, in chan int, out chan []byte) {
+            // Establish conn
+            conn, err := net.DialTimeout("tcp", peer.Addr(), 3 * time.Second) 
             if err != nil {
-                continue
+                fmt.Println(err)
+                return
             }
 
-            if msg.ID == message.IDPiece {
-                block := msg.Payload.Block()
-                fmt.Printf("PEER: Block{Index: %d, Offset: %d}\n", block.Index, block.Offset)
+            defer conn.Close()
+            // Handshake
+            hs := handshake.New(hash, clientID)
+            handshake.Write(conn, hs)
+
+            hs, err = handshake.Read(conn)
+            if err != nil {
+                fmt.Println(err)
+                return
             }
 
-            peer.Handle(msg) 
-        }
-    }()
-
-    for {
-        // NOTE: Maybe a channel ?
-        downloable := []int{}
-
-        for i := range pieces {
-            if peer.Has(i) {
-                downloable = append(downloable, i)
+            if hs.InfoHash != hash {
+                return
             }
-        }
-        
-        // should be a separate goroutine
-        if len(downloable) != 0 && !peer.Interesting {
-            err := peer.Interest()
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-            fmt.Println("CLIENT: Interested")
             
-            // downloading as long as we are interested
-            for len(downloable) != 0 {
-                if !peer.Choking {
-                    i := downloable[len(downloable)-1]        
-                    downloading = append(downloading, pieces[i])
-                    pieces = append(pieces[0:i], pieces[i+1:]...)
+            // Message loop
+            //choked := true
+            interesting := false
+            //choking := true
+            //interested := false
 
-                    offset := 0
-                    size := torrent.PieceLength
+            downloadable := []int{}
+            //requests := []*message.Request{}
+            for {
+                msg, err := message.Read(conn)
+                if err != nil {
+                    fmt.Println(err)
+                    return
+                }
 
-                    for offset != size {
-                        length := int(math.Min(float64(size - offset), float64(RequestLength)))
-                        err := peer.Request(i, offset, length)
+                switch msg.ID {
+                case message.IDChoke:
+                    //choking = true
+                case message.IDUnchoke:
+                    //choking = false
+                    // dump all pipelined request for piece
+                    //for _, request := range requests {
+                    //    msg := &message.Message{ID: message.IDRequest, Payload: message.NewRequestPayload(*request)} 
+                    //    _, err := message.Write(conn, msg)
+                    //    if err != nil {
+                    //        fmt.Println(err)
+                    //        return
+                    //    }
+                    //}
+
+                case message.IDInterested:
+                    //interested = true
+                case message.IDNotInterested:
+                    //interested = false
+                case message.IDHave:
+                    have := int(msg.Payload.Have())
+                    
+                    // TODO: Change how we handle which pieces we can download
+                    for index := range missing {
+                        if have == index {
+                            downloadable = append(downloadable, index)
+                        }
+                        missing<-index
+                    }
+
+                    if len(downloadable) != 0 && !interesting {
+                        msg := &message.Message{ID: message.IDInterested}
+                        _, err := message.Write(conn, msg)
                         if err != nil {
                             fmt.Println(err)
                             return
                         }
-
-                        fmt.Printf("CLIENT: Request{Index: %d, Offset: %d, Length: %d}\n", i, offset, length)
-                        offset += length
+                    }
+                case message.IDBitfield:
+                    bitfield := msg.Payload.Bitfield()
+                    
+                    // TODO: Change how we handle which pieces we can download
+                    for index := range missing {
+                        if bitfield.Get(index) {
+                            downloadable = append(downloadable, index)
+                        }
+                        missing<-index
                     }
 
-                    downloable = downloable[:len(downloable)-1]
-
-                    // TODO: Check hash
-                }
+                    if len(downloadable) != 0 && !interesting {
+                        msg := &message.Message{ID: message.IDInterested}
+                        _, err := message.Write(conn, msg)
+                        if err != nil {
+                            fmt.Println(err)
+                            return
+                        }
+                    }
+                case message.IDPiece:
+                }    
             }
+        }(peer, missing, downloaded)
+    }
 
-            err = peer.Uninterest() 
-            if err != nil {
-				fmt.Println(err)
-				return
-			}
-            fmt.Println("CLIENT: Not Interested")
-        }
-	}
+    for block := range downloaded {
+        fmt.Println(block)
+    }
 }
