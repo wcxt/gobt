@@ -58,12 +58,12 @@ func (mid MetainfoDict) Hashes() ([][20]byte, error) {
 	if len(byteStr)%20 != 0 {
 		return [][20]byte{}, errors.New("pieces length not divisable by 20")
 	}
-
+    
 	hashesLen := len(byteStr) / 20
 	hashes := make([][20]byte, hashesLen)
 
-	for i := 0; i < len(byteStr); i += 20 {
-		hashes = append(hashes, [20]byte(byteStr[i:i+20]))
+	for i := 0; i < hashesLen; i++ {
+		hashes[i] = [20]byte(byteStr[i:i+20])
 	}
 
 	return hashes, nil
