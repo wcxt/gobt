@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"time"
@@ -12,7 +13,7 @@ import (
 )
 
 const (
-    RequestLength = 16000
+    MaxBlockLength = 16000
     MaxPipelinedRequests = 5
 )
 
@@ -86,6 +87,11 @@ func main() {
 
         downloadable := []int{}
         
+        // TODO: Pipeline requests
+        // Request vars 
+        current := 0
+        subCurrent := 0
+        
         for {
             msg, err := message.Read(conn)
             if err != nil {
@@ -95,22 +101,43 @@ func main() {
 
             switch msg.ID {
             //case message.IDChoke:
-            //case message.IDUnchoke:
             //case message.IDInterested:
             //case message.IDNotInterested:
             //case message.IDPiece:
+            case message.IDUnchoke:
+                if len(downloadable) > current && interesting {
+                    index := downloadable[current]
+                    offset := subCurrent * MaxBlockLength
+                    length := math.Min(float64(metainfo.Info.PieceLength - offset), float64(MaxBlockLength))
+
+                    req := message.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
+                    nmsg := &message.Message{ID: message.IDRequest, Payload: message.NewRequestPayload(req)} 
+                    _, err := message.Write(conn, nmsg)
+                    if err != nil {
+                        fmt.Println(err)
+                        return
+                    }
+                    subCurrent += 1
+                    
+                    if subCurrent == 4 {
+                        current += 1
+                        subCurrent = 0
+                    }
+                }
             case message.IDHave:
                 have := int(msg.Payload.Have())
                 
+                // Detect peer downloaded pieces
                 for index := range missing {
                     if have == index {
                         downloadable = append(downloadable, index)
                     }
                 }
                 
+                // Send our new state
                 if len(downloadable) != 0 && !interesting {
-                    msg := &message.Message{ID: message.IDInterested}
-                    _, err := message.Write(conn, msg)
+                    nmsg := &message.Message{ID: message.IDInterested}
+                    _, err := message.Write(conn, nmsg)
                     if err != nil {
                         fmt.Println(err)
                         return
@@ -120,15 +147,17 @@ func main() {
             case message.IDBitfield:
                 bitfield := msg.Payload.Bitfield()
                 
+                // Detect peer downloaded pieces
                 for index := range missing {
                     if bitfield.Get(index) {
                         downloadable = append(downloadable, index)
                     }
                 }
                 
+                // Send our new state
                 if len(downloadable) != 0 && !interesting {
-                    msg := &message.Message{ID: message.IDInterested}
-                    _, err := message.Write(conn, msg)
+                    nmsg := &message.Message{ID: message.IDInterested}
+                    _, err := message.Write(conn, nmsg)
                     if err != nil {
                         fmt.Println(err)
                         return
