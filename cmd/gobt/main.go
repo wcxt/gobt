@@ -84,13 +84,14 @@ func main() {
         interesting := false
         //choking := true
         //interested := false
+        blocksPerPiece := int(metainfo.Info.PieceLength / MaxBlockLength)
 
         downloadable := []int{}
         
         // TODO: Pipeline requests
         // Request vars 
-        current := 0
-        subCurrent := 0
+        currentPiece := 0
+        currentBlock := 0
         
         for {
             msg, err := message.Read(conn)
@@ -105,9 +106,9 @@ func main() {
             //case message.IDNotInterested:
             //case message.IDPiece:
             case message.IDUnchoke:
-                if len(downloadable) > current && interesting {
-                    index := downloadable[current]
-                    offset := subCurrent * MaxBlockLength
+                if len(downloadable) > currentPiece && interesting {
+                    index := downloadable[currentPiece]
+                    offset := currentBlock * MaxBlockLength
                     length := math.Min(float64(metainfo.Info.PieceLength - offset), float64(MaxBlockLength))
 
                     req := message.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
@@ -117,11 +118,11 @@ func main() {
                         fmt.Println(err)
                         return
                     }
-                    subCurrent += 1
+                    currentBlock += 1
                     
-                    if subCurrent == 4 {
-                        current += 1
-                        subCurrent = 0
+                    if currentBlock == blocksPerPiece {
+                        currentPiece += 1
+                        currentBlock = 0
                     }
                 }
             case message.IDHave:
