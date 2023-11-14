@@ -63,7 +63,7 @@ func (mid MetainfoDict) Hashes() ([][20]byte, error) {
 	hashes := make([][20]byte, hashesLen)
 
 	for i := 0; i < hashesLen; i++ {
-		hashes[i] = [20]byte(byteStr[i:i+20])
+		hashes[i] = [20]byte(byteStr[i*20:i*20+20])
 	}
 
 	return hashes, nil
