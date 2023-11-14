@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/edwces/gobt/handshake"
 	bencode "github.com/jackpal/bencode-go"
 )
 
@@ -79,4 +80,18 @@ func GetAvailablePeers(uri string, hash [20]byte, peerID [20]byte, length int) (
     return ann.Peers, nil
 }
 
+func EstablishHandshake(conn net.Conn, hash [20]byte, clientID [20]byte) error {
+    hs := handshake.New(hash, clientID)
+    handshake.Write(conn, hs)
 
+    hs, err := handshake.Read(conn)
+    if err != nil {
+        return err
+    }
+
+    if hs.InfoHash != hash {
+        return fmt.Errorf("InfoHash unexpected value: %s", hs.InfoHash) 
+    }
+    
+    return nil
+}

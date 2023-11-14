@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/edwces/gobt"
-	"github.com/edwces/gobt/handshake"
 	"github.com/edwces/gobt/message"
 )
 
@@ -60,25 +59,18 @@ func main() {
         // Establish conn
         conn, err := net.DialTimeout("tcp", peer.Addr(), 3 * time.Second) 
         if err != nil {
-            fmt.Println(err)
+            fmt.Printf("connection error: %v\n", err)
             return
         }
-
         defer conn.Close()
-        // Handshake
-        hs := handshake.New(hash, clientID)
-        handshake.Write(conn, hs)
 
-        hs, err = handshake.Read(conn)
+        // Establish handshake
+        err = gobt.EstablishHandshake(conn, hash, clientID)
         if err != nil {
-            fmt.Println(err)
+            fmt.Printf("handshake error: %v\n", err)
             return
         }
 
-        if hs.InfoHash != hash {
-            return
-        }
-        
         // Message loop
         //choked := true
         interesting := false
