@@ -114,12 +114,11 @@ func main() {
 					blockBuffer = []byte{}
 				}
 
-				if len(downloadable) > currentPiece && interesting {
-					index := downloadable[currentPiece]
+				if len(downloadable) != 0 && interesting {
 					offset := currentBlock * MaxBlockLength
 					length := math.Min(float64(metainfo.Info.PieceLength-offset), float64(MaxBlockLength))
 
-					req := message.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
+					req := message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)}
 					nmsg := &message.Message{ID: message.IDRequest, Payload: message.NewRequestPayload(req)}
 					_, err := message.Write(conn, nmsg)
 					if err != nil {
@@ -129,18 +128,29 @@ func main() {
 					currentBlock += 1
 
 					if currentBlock == blocksPerPiece {
-						currentPiece += 1
+                        downloadable = downloadable[1:]
+                        currentPiece = downloadable[0]
+
 						currentBlock = 0
 					}
 				}
 
+                if len(downloadable) == 0 && interesting {
+                    nmsg := &message.Message{ID: message.IDNotInterested}
+					_, err := message.Write(conn, nmsg)
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
+					interesting = false
+                }
+
 			case message.IDUnchoke:
-				if len(downloadable) > currentPiece && interesting {
-					index := downloadable[currentPiece]
+				if len(downloadable) != 0 && interesting {
 					offset := currentBlock * MaxBlockLength
 					length := math.Min(float64(metainfo.Info.PieceLength-offset), float64(MaxBlockLength))
 
-					req := message.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
+					req := message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)}
 					nmsg := &message.Message{ID: message.IDRequest, Payload: message.NewRequestPayload(req)}
 					_, err := message.Write(conn, nmsg)
 					if err != nil {
@@ -149,10 +159,12 @@ func main() {
 					}
 					currentBlock += 1
 
-					if currentBlock == blocksPerPiece {
-						currentPiece += 1
+                    if currentBlock == blocksPerPiece {
+                        downloadable = downloadable[1:]
+                        currentPiece = downloadable[0]
+
 						currentBlock = 0
-					}
+                    }
 				}
 			case message.IDHave:
 				have := int(msg.Payload.Have())
@@ -173,6 +185,8 @@ func main() {
 						return
 					}
 					interesting = true
+
+                    currentPiece = downloadable[0]
 				}
 			case message.IDBitfield:
 				bitfield := msg.Payload.Bitfield()
@@ -193,6 +207,8 @@ func main() {
 						return
 					}
 					interesting = true
+
+                    currentPiece = downloadable[0]
 				}
 			}
 		}
