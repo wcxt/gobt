@@ -4,9 +4,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"math"
-	"net"
 	"os"
-	"time"
 
 	"github.com/edwces/gobt"
 	"github.com/edwces/gobt/message"
@@ -52,169 +50,154 @@ func main() {
 		return
 	}
 
-	missing := make([]int, len(hashes))
-	downloaded := make(chan []byte, metainfo.Info.Length)
+    pieceRequests := make([]bool, len(hashes))
+    
+    conn, err := gobt.DialTimeout(peers[0].Addr())
+    if err != nil {
+        fmt.Printf("connection error: %v\n", err)
+        return
+    }
+    defer conn.Close()
 
-	// Connect to peers
-	go func(peer gobt.AnnouncePeer, in []int, out chan []byte) {
-		// Establish conn
-		conn, err := net.DialTimeout("tcp", peer.Addr(), 3*time.Second)
-		if err != nil {
-			fmt.Printf("connection error: %v\n", err)
-			return
-		}
-		defer conn.Close()
+    err = conn.Handshake(hash, clientID)
+    if err != nil {
+        fmt.Printf("handshake error: %v\n", err)
+        return
+    }
 
-		// Establish handshake
-		err = gobt.EstablishHandshake(conn, hash, clientID)
-		if err != nil {
-			fmt.Printf("handshake error: %v\n", err)
-			return
-		}
+    // Message loop
+    //choked := true
+    interesting := false
+    //choking := true
+    //interested := false
+    blocksPerPiece := int(math.Ceil(float64(metainfo.Info.PieceLength) / float64(MaxBlockLength)))
 
-		// Message loop
-		//choked := true
-		interesting := false
-		//choking := true
-		//interested := false
-		blocksPerPiece := int(math.Ceil(float64(metainfo.Info.PieceLength) / float64(MaxBlockLength)))
+    downloadable := []int{}
+    blockBuffer := []byte{}
 
-		downloadable := []int{}
-		blockBuffer := []byte{}
+    // TODO: Pipeline requests
+    // Request vars
+    currentPiece := 0
+    currentBlock := 0
 
-		// TODO: Pipeline requests
-		// Request vars
-		currentPiece := 0
-		currentBlock := 0
 
-		for {
-			msg, err := message.Read(conn)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
+    for {
+        msg, err := conn.ReadMsg()
+        if err != nil {
+            fmt.Println(err)
+            return
+        }
 
-			switch msg.ID {
-			//case message.IDChoke:
-			//case message.IDInterested:
-			//case message.IDNotInterested:
-			case message.IDPiece:
-				block := msg.Payload.Block()
-				fmt.Println(block.Index, block.Offset)
+        switch msg.ID {
+        //case message.IDChoke:
+        //case message.IDInterested:
+        //case message.IDNotInterested:
+        case message.IDPiece:
+            block := msg.Payload.Block()
+            fmt.Println(block.Index, block.Offset)
 
-				// Save to downloaded blocks in a piece
-				blockBuffer = append(blockBuffer, block.Block...)
-                
-				if len(blockBuffer) == metainfo.Info.PieceLength {
-					// TODO: Make it no longer downloadable
-                    blocksHash := sha1.Sum(blockBuffer)
-                    if blocksHash == hashes[block.Index] {
-                        fmt.Println("GOT PIECE WITH CORRECT HASH")
-                    }
-					blockBuffer = []byte{}
-				}
-
-				if len(downloadable) != 0 && interesting {
-					offset := currentBlock * MaxBlockLength
-					length := math.Min(float64(metainfo.Info.PieceLength-offset), float64(MaxBlockLength))
-
-					req := message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)}
-					nmsg := &message.Message{ID: message.IDRequest, Payload: message.NewRequestPayload(req)}
-					_, err := message.Write(conn, nmsg)
-					if err != nil {
-						fmt.Println(err)
-						return
-					}
-					currentBlock += 1
-
-					if currentBlock == blocksPerPiece {
-                        downloadable = downloadable[1:]
-                        currentPiece = downloadable[0]
-
-						currentBlock = 0
-					}
-				}
-
-                if len(downloadable) == 0 && interesting {
-                    nmsg := &message.Message{ID: message.IDNotInterested}
-					_, err := message.Write(conn, nmsg)
-					if err != nil {
-						fmt.Println(err)
-						return
-					}
-					interesting = false
+            // Save to downloaded blocks in a piece
+            blockBuffer = append(blockBuffer, block.Block...)
+            
+            if len(blockBuffer) == metainfo.Info.PieceLength {
+                blocksHash := sha1.Sum(blockBuffer)
+                if blocksHash == hashes[block.Index] {
+                    fmt.Println("GOT PIECE WITH CORRECT HASH")
                 }
+                // else mark piece as not being downloaded
+                blockBuffer = []byte{}
+            }
 
-			case message.IDUnchoke:
-				if len(downloadable) != 0 && interesting {
-					offset := currentBlock * MaxBlockLength
-					length := math.Min(float64(metainfo.Info.PieceLength-offset), float64(MaxBlockLength))
+            if len(downloadable) != 0 && interesting {
+                offset := currentBlock * MaxBlockLength
+                length := math.Min(float64(metainfo.Info.PieceLength-offset), float64(MaxBlockLength))
 
-					req := message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)}
-					nmsg := &message.Message{ID: message.IDRequest, Payload: message.NewRequestPayload(req)}
-					_, err := message.Write(conn, nmsg)
-					if err != nil {
-						fmt.Println(err)
-						return
-					}
-					currentBlock += 1
+                _, err := conn.WriteRequest(currentPiece, offset, int(length)) 
+                if err != nil {
+                    fmt.Println(err)
+                    return
+                }
+                currentBlock += 1
 
-                    if currentBlock == blocksPerPiece {
-                        downloadable = downloadable[1:]
-                        currentPiece = downloadable[0]
-
-						currentBlock = 0
-                    }
-				}
-			case message.IDHave:
-				have := int(msg.Payload.Have())
-
-				// Detect peer downloaded pieces
-				for index := range missing {
-					if have == index {
-						downloadable = append(downloadable, index)
-					}
-				}
-
-				// Send our new state
-				if len(downloadable) != 0 && !interesting {
-					nmsg := &message.Message{ID: message.IDInterested}
-					_, err := message.Write(conn, nmsg)
-					if err != nil {
-						fmt.Println(err)
-						return
-					}
-					interesting = true
-
+                if currentBlock == blocksPerPiece {
+                    downloadable = downloadable[1:]
                     currentPiece = downloadable[0]
-				}
-			case message.IDBitfield:
-				bitfield := msg.Payload.Bitfield()
+                    // mark piece as being downloaded by this peer
 
-				// Detect peer downloaded pieces
-				for index := range missing {
-					if bitfield.Get(index) {
-						downloadable = append(downloadable, index)
-					}
-				}
+                    currentBlock = 0
+                }
+            }
 
-				// Send our new state
-				if len(downloadable) != 0 && !interesting {
-					nmsg := &message.Message{ID: message.IDInterested}
-					_, err := message.Write(conn, nmsg)
-					if err != nil {
-						fmt.Println(err)
-						return
-					}
-					interesting = true
+            if len(downloadable) == 0 && interesting {
+                _, err := conn.WriteNotInterested()
+                if err != nil {
+                    fmt.Println(err)
+                    return
+                }
+                interesting = false
+            }
 
+        case message.IDUnchoke:
+            if len(downloadable) != 0 && interesting {
+                offset := currentBlock * MaxBlockLength
+                length := math.Min(float64(metainfo.Info.PieceLength-offset), float64(MaxBlockLength))
+
+                _, err := conn.WriteRequest(currentPiece, offset, int(length))
+                if err != nil {
+                    fmt.Println(err)
+                    return
+                }
+                currentBlock += 1
+
+                if currentBlock == blocksPerPiece {
+                    downloadable = downloadable[1:]
                     currentPiece = downloadable[0]
-				}
-			}
-		}
-	}(peers[0], missing, downloaded)
 
-	for block := range downloaded {
-		fmt.Println(block)
-	}
+                    currentBlock = 0
+                }
+            }
+        case message.IDHave:
+            have := int(msg.Payload.Have())
+
+            // Detect peer downloaded pieces
+            for index, processing := range pieceRequests {
+                if have == index && !processing {
+                    downloadable = append(downloadable, index)
+                }
+            }
+
+            // Send our new state
+            if len(downloadable) != 0 && !interesting {
+                conn.WriteInterested()
+                if err != nil {
+                    fmt.Println(err)
+                    return
+                }
+                interesting = true
+
+                currentPiece = downloadable[0]
+            }
+        case message.IDBitfield:
+            bitfield := msg.Payload.Bitfield()
+
+            // Detect peer downloaded pieces
+            for index, processing := range pieceRequests {
+                if bitfield.Get(index) && !processing {
+                    downloadable = append(downloadable, index)
+                }
+            }
+
+            // Send our new state
+            if len(downloadable) != 0 && !interesting {
+                conn.WriteInterested()
+                if err != nil {
+                    fmt.Println(err)
+                    return
+                }
+                interesting = true
+
+                currentPiece = downloadable[0]
+            }
+        }
+    }
 }
