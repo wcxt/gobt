@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"time"
 
 	"github.com/edwces/gobt"
 	"github.com/edwces/gobt/message"
@@ -14,6 +15,7 @@ const (
 	MaxBlockLength       = 16000
 	MaxPipelinedRequests = 5
     MaxHashFails = 5
+    MaxPeerTimeout = 2 * time.Minute + 10 * time.Second
 )
 
 func main() {
@@ -85,12 +87,26 @@ func main() {
     currentPiece := 0
     currentBlock := 0
 
+    timer := time.NewTimer(MaxPeerTimeout)
+    defer timer.Stop()
+
+    go func(){
+        <-timer.C
+        conn.Close()
+    }()
 
     for {
         msg, err := conn.ReadMsg()
         if err != nil {
             fmt.Println(err)
             return
+        }
+        
+        if msg.KeepAlive {
+            if !timer.Stop() {
+                return
+            }
+            timer.Reset(MaxPeerTimeout)
         }
 
         switch msg.ID {
