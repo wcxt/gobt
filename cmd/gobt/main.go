@@ -94,7 +94,14 @@ func main() {
         }
 
         switch msg.ID {
-        //case message.IDChoke:
+        case message.IDChoke:
+            for _, req := range requestQueue {
+                currentBlock = int(req.Offset) / MaxBlockLength
+                if int(req.Index) != currentPiece {
+                    currentPiece = int(req.Index)
+                    downloadable = append([]int{currentPiece}, downloadable...)
+                }
+            }
         //case message.IDInterested:
         //case message.IDNotInterested:
         case message.IDPiece:
