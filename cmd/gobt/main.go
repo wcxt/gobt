@@ -13,6 +13,7 @@ import (
 const (
 	MaxBlockLength       = 16000
 	MaxPipelinedRequests = 5
+    MaxHashFails = 5
 )
 
 func main() {
@@ -64,6 +65,8 @@ func main() {
         fmt.Printf("handshake error: %v\n", err)
         return
     }
+    
+    hashFails := 0
 
     // Message loop
     //choked := true
@@ -105,12 +108,20 @@ func main() {
                 blocksHash := sha1.Sum(blockBuffer)
                 if blocksHash == hashes[block.Index] {
                     fmt.Println("GOT PIECE WITH CORRECT HASH")
+                    pieceRequests[block.Index] = true
+                } else {
+                    hashFails += 1
                 }
                 // else mark piece as not being downloaded
                 blockBuffer = []byte{}
             }
 
             requestQueue = requestQueue[1:]
+
+            if hashFails >= MaxHashFails {
+                fmt.Println("Excedded Maximum hash fails: 5")
+                return
+            }
 
             for i := len(requestQueue); i < MaxPipelinedRequests; i++ {
                 if len(downloadable) != 0 && interesting {
