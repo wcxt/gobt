@@ -75,6 +75,8 @@ func main() {
     downloadable := []int{}
     blockBuffer := []byte{}
 
+    requestQueue := []message.Request{}
+
     // TODO: Pipeline requests
     // Request vars
     currentPiece := 0
@@ -108,23 +110,30 @@ func main() {
                 blockBuffer = []byte{}
             }
 
-            if len(downloadable) != 0 && interesting {
-                offset := currentBlock * MaxBlockLength
-                length := math.Min(float64(metainfo.Info.PieceLength-offset), float64(MaxBlockLength))
+            requestQueue = requestQueue[1:]
 
-                _, err := conn.WriteRequest(currentPiece, offset, int(length)) 
-                if err != nil {
-                    fmt.Println(err)
-                    return
-                }
-                currentBlock += 1
+            for i := len(requestQueue); i < MaxPipelinedRequests; i++ {
+                if len(downloadable) != 0 && interesting {
+                    offset := currentBlock * MaxBlockLength
+                    length := math.Min(float64(metainfo.Info.PieceLength-offset), float64(MaxBlockLength))
 
-                if currentBlock == blocksPerPiece {
-                    downloadable = downloadable[1:]
-                    currentPiece = downloadable[0]
-                    // mark piece as being downloaded by this peer
+                    _, err := conn.WriteRequest(currentPiece, offset, int(length)) 
+                    if err != nil {
+                        fmt.Println(err)
+                        return
+                    }
+                    currentBlock += 1
 
-                    currentBlock = 0
+                    // Put request in pipeline
+                    requestQueue = append(requestQueue, message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)})
+
+                    if currentBlock == blocksPerPiece {
+                        downloadable = downloadable[1:]
+                        currentPiece = downloadable[0]
+                        // mark piece as being downloaded by this peer
+
+                        currentBlock = 0
+                    }
                 }
             }
 
@@ -138,22 +147,27 @@ func main() {
             }
 
         case message.IDUnchoke:
-            if len(downloadable) != 0 && interesting {
-                offset := currentBlock * MaxBlockLength
-                length := math.Min(float64(metainfo.Info.PieceLength-offset), float64(MaxBlockLength))
+            for i := len(requestQueue); i < MaxPipelinedRequests; i++ {
+                if len(downloadable) != 0 && interesting {
+                    offset := currentBlock * MaxBlockLength
+                    length := math.Min(float64(metainfo.Info.PieceLength-offset), float64(MaxBlockLength))
 
-                _, err := conn.WriteRequest(currentPiece, offset, int(length))
-                if err != nil {
-                    fmt.Println(err)
-                    return
-                }
-                currentBlock += 1
+                    _, err := conn.WriteRequest(currentPiece, offset, int(length))
+                    if err != nil {
+                        fmt.Println(err)
+                        return
+                    }
+                    currentBlock += 1
 
-                if currentBlock == blocksPerPiece {
-                    downloadable = downloadable[1:]
-                    currentPiece = downloadable[0]
+                    // Put request in pipeline
+                    requestQueue = append(requestQueue, message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)})
 
-                    currentBlock = 0
+                    if currentBlock == blocksPerPiece {
+                        downloadable = downloadable[1:]
+                        currentPiece = downloadable[0]
+
+                        currentBlock = 0
+                    }
                 }
             }
         case message.IDHave:
