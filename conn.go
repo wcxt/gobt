@@ -47,7 +47,7 @@ func (c *Conn) ReadMsg() (*message.Message, error) {
         return nil, err
     }
 
-    fmt.Printf("MSG READ: %d\n", msg.ID)
+    fmt.Printf("%s: MSG READ: %d\n", c.conn.RemoteAddr().String(), msg.ID)
     return msg, nil
 }
 
@@ -58,7 +58,7 @@ func (c *Conn) WriteMsg(id message.ID, payload message.Payload) (int, error) {
         return wb, err
     }
 
-    fmt.Printf("MSG WRITE: %d\n", nmsg.ID)
+    fmt.Printf("%s: MSG WRITE: %d\n", c.conn.RemoteAddr().String(), nmsg.ID)
     return wb, nil
 }
 
