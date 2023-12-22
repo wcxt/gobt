@@ -131,7 +131,7 @@ func main() {
 				//case message.IDNotInterested:
 				case message.IDPiece:
 					block := msg.Payload.Block()
-					fmt.Println(block.Index, block.Offset)
+					//fmt.Println(block.Index, block.Offset)
 
 					// Save to downloaded blocks in a piece
 					blockBuffer = append(blockBuffer, block.Block...)
@@ -142,9 +142,9 @@ func main() {
 							pieceDone[block.Index] = true
                             pieceCounter--
 
-                            fmt.Printf("PIECE GOT: %d; PIECES LEFT: %d\n", currentPiece, pieceCounter)
+                            fmt.Printf("%s GOT: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
 
-                            _, err = conn.WriteHave(currentPiece)
+                            _, err = conn.WriteHave(int(block.Index))
                             if err != nil {
                                 return
                             }
@@ -187,7 +187,7 @@ func main() {
 								downloadable = downloadable[1:]
 
 								// TEMP: skip over pieces that are being downloaded by other peers
-								for !pieceRequests[currentPiece] && len(downloadable) > 0 {
+								for pieceRequests[currentPiece] && len(downloadable) > 0 {
 									currentPiece = downloadable[0]
 									downloadable = downloadable[1:]
 								}
@@ -238,7 +238,7 @@ func main() {
 								downloadable = downloadable[1:]
                         
                                 // TEMP: skip over pieces that are being downloaded by other peers
-								for !pieceRequests[currentPiece] && len(downloadable) > 0 {
+								for pieceRequests[currentPiece] && len(downloadable) > 0 {
 									currentPiece = downloadable[0]
 									downloadable = downloadable[1:]
 								}
@@ -293,6 +293,10 @@ func main() {
 							downloadable = append(downloadable, index)
 						}
 					}
+
+                    fmt.Printf("%s HAS %d PIECES\n", peer.Addr(), len(downloadable))
+                    
+
 
                     // Select first piece
                     for len(downloadable) != 0 {
