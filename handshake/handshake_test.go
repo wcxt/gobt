@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/edwces/gobt/wire/handshake"
+	"github.com/edwces/gobt/handshake"
 )
 
 func TestWriteHandshake(t *testing.T) {
