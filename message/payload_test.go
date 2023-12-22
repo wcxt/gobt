@@ -2,6 +2,7 @@ package message_test
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 
 	"github.com/edwces/gobt/message"
@@ -18,7 +19,7 @@ func TestNewBitfieldPayload(t *testing.T) {
     bitfield.Set(8)
 
     got := message.NewBitfieldPayload(bitfield)
-    want := []byte{136, 133}
+    want := message.Payload([]byte{136, 133})
     
     if !bytes.Equal(got, want) {
         t.Fatalf("got %#v, want %#v", got, want)
@@ -66,8 +67,32 @@ func TestBitfieldGet(t *testing.T) {
             }
         })
     }
+}
 
+func TestNewRequestPayload(t *testing.T) {
+    req := message.Request{Index: 1467, Offset: 64000, Length: 16000}
 
+    got := message.NewRequestPayload(req)
+    want := message.Payload([]byte{0x00, 0x00, 0x05, 0xBB,
+                                   0x00, 0x00, 0xFA, 0x00,
+                                   0x00, 0x00, 0x3E, 0x80})
+
+    if !bytes.Equal(got, want) {
+        t.Fatalf("got %#v, want %#v", got, want)
+    }
+}
+
+func TestPayloadRequest(t *testing.T) {
+    payload := message.Payload([]byte{0x00, 0x00, 0x05, 0xBB,
+                                      0x00, 0x00, 0xFA, 0x00,
+                                      0x00, 0x00, 0x3E, 0x80})
+    
+    got := payload.Request()
+    want := message.Request{Index: 1467, Offset: 64000, Length: 16000}
+
+    if !reflect.DeepEqual(got, want) {
+        t.Fatalf("got %#v, want %#v", got, want)
+    }
 }
 
 
