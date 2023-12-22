@@ -125,6 +125,8 @@ func main() {
 							currentPiece = int(req.Index)
 						}
 					}
+
+                    requestQueue = []message.Request{}
 				//case message.IDInterested:
 				//case message.IDNotInterested:
 				case message.IDPiece:
@@ -140,7 +142,12 @@ func main() {
 							pieceDone[block.Index] = true
                             pieceCounter--
 
-                            fmt.Printf("PIECES LEFT: %d\n", pieceCounter)
+                            fmt.Printf("PIECE GOT: %d; PIECES LEFT: %d\n", currentPiece, pieceCounter)
+
+                            _, err = conn.WriteHave(currentPiece)
+                            if err != nil {
+                                return
+                            }
 						} else {
 							hashFails += 1
 							pieceRequests[block.Index] = false

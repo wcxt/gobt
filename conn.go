@@ -86,6 +86,11 @@ func (c *Conn) WriteRequest(index, offset, length int) (int, error) {
     return c.WriteMsg(message.IDRequest, payload)
 }
 
+func (c *Conn) WriteHave(index int) (int, error) {
+    payload := message.NewHavePayload(uint32(index))
+    return c.WriteMsg(message.IDHave, payload)
+}
+
 func (c *Conn) Close() error {
     return c.conn.Close()
 }
