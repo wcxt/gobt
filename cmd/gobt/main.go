@@ -112,6 +112,7 @@ func main() {
 						return
 					}
 					timer.Reset(MaxPeerTimeout)
+                    continue
 				}
 
 				switch msg.ID {

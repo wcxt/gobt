@@ -47,7 +47,12 @@ func (c *Conn) ReadMsg() (*message.Message, error) {
         return nil, err
     }
 
-    fmt.Printf("%s: MSG READ: %d\n", c.conn.RemoteAddr().String(), msg.ID)
+    if msg.KeepAlive {
+        fmt.Printf("%s: MSG READ: KeepAlive\n", c.conn.RemoteAddr().String())
+    } else {
+        fmt.Printf("%s: MSG READ: %d\n", c.conn.RemoteAddr().String(), msg.ID)
+    }
+
     return msg, nil
 }
 
