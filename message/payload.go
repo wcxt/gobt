@@ -10,13 +10,13 @@ type Bitfield []byte
 func (bf Bitfield) Set(i int) {
 	byteI := i / 8
 	bitI := i % 8
-	bf[byteI] |= 0b00000001 << bitI
+	bf[byteI] |= 0b10000000 >> bitI
 }
 
 func (bf Bitfield) Get(i int) bool {
 	byteI := i / 8
 	bitI := i % 8
-	val := int(bf[byteI] & (0b00000001 << bitI))
+	val := int(bf[byteI] & (0b10000000 >> bitI))
 	return val != 0
 }
 
