@@ -82,7 +82,7 @@ func main() {
 			//interested := false
 			blocksPerPiece := int(math.Ceil(float64(metainfo.Info.PieceLength) / float64(MaxBlockLength)))
 
-			downloadable := []int{}
+			var bitfield message.Bitfield
 			blockBuffer := []byte{}
 
 			requestQueue := []message.Request{}
@@ -120,7 +120,6 @@ func main() {
 					for _, req := range requestQueue {
 						currentBlock = int(req.Offset) / MaxBlockLength
 						if int(req.Index) != currentPiece {
-							downloadable = append([]int{currentPiece}, downloadable...)
                             pieceRequests[currentPiece] = false
 							currentPiece = int(req.Index)
 						}
@@ -138,11 +137,12 @@ func main() {
 
 					if len(blockBuffer) == metainfo.Info.PieceLength {
 						blocksHash := sha1.Sum(blockBuffer)
+                        pieceCounter--
+
 						if blocksHash == hashes[block.Index] {
 							pieceDone[block.Index] = true
-                            pieceCounter--
 
-                            fmt.Printf("%s GOT: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
+                            fmt.Printf("%s GOT: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter) 
 
                             _, err = conn.WriteHave(int(block.Index))
                             if err != nil {
@@ -179,32 +179,39 @@ func main() {
 							requestQueue = append(requestQueue, message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)})
 
 							if currentBlock == blocksPerPiece {
-                                if len(downloadable) == 0 {
+                                // TEMP FIX but BUG
+                                oldCurrPiece := currentPiece 
+
+                                for range pieceRequests {
+                                    index := rand.Intn(len(pieceRequests))
+
+                                    if !bitfield.Get(index) || pieceRequests[index] {
+                                       continue    
+                                    }
+
+                                    currentPiece = index
+                                    pieceRequests[index] = true
+
                                     break
                                 }
 
-								currentPiece = downloadable[0]
-								downloadable = downloadable[1:]
-
-								// TEMP: skip over pieces that are being downloaded by other peers
-								for pieceRequests[currentPiece] && len(downloadable) > 0 {
-									currentPiece = downloadable[0]
-									downloadable = downloadable[1:]
-								}
-
-                                if len(downloadable) == 0 {
+                                if oldCurrPiece == currentPiece {
                                     break
                                 }
-
-								// mark piece as being downloaded by this peer
-								pieceRequests[currentPiece] = true
 
 								currentBlock = 0
 							}
 						}
 					}
 
-					if len(downloadable) == 0 && interesting && len(requestQueue) == 0 {
+                    allDone := true
+                    for i := range pieceRequests {
+                        if bitfield.Get(i) && !pieceDone[i] {
+                            allDone = false
+                        }
+                    }
+
+					if allDone && interesting && len(requestQueue) == 0 {
 						_, err := conn.WriteNotInterested()
 						if err != nil {
 							fmt.Println(err)
@@ -230,26 +237,25 @@ func main() {
 							requestQueue = append(requestQueue, message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)})
 
 							if currentBlock == blocksPerPiece {
-                                if len(downloadable) == 0 {
-                                    break
-                                } 
+                                // TEMP FIX but BUG
+                                oldCurrPiece := currentPiece 
 
-								currentPiece = downloadable[0]
-								downloadable = downloadable[1:]
-                        
-                                // TEMP: skip over pieces that are being downloaded by other peers
-								for pieceRequests[currentPiece] && len(downloadable) > 0 {
-									currentPiece = downloadable[0]
-									downloadable = downloadable[1:]
-								}
+                                for range pieceRequests {
+                                    index := rand.Intn(len(pieceRequests))
 
-                                if len(downloadable) == 0 {
+                                    if !bitfield.Get(index) || pieceRequests[index] {
+                                       continue    
+                                    }
+
+                                    currentPiece = index
+                                    pieceRequests[index] = true
+
                                     break
                                 }
 
-
-								// mark piece as being downloaded by this peer
-								pieceRequests[currentPiece] = true
+                                if oldCurrPiece == currentPiece {
+                                    break
+                                }
 
 								currentBlock = 0
 							}
@@ -257,67 +263,29 @@ func main() {
 					}
 				case message.IDHave:
 					have := int(msg.Payload.Have())
-                    old := len(downloadable)
+                    bitfield.Set(have)
 
-					// Detect peer downloaded pieces
-					for index, processing := range pieceDone {
-						if have == index && !processing {
-							downloadable = append(downloadable, index)
-						}
-					}
-                    
-                    // Select new piece if it's the only one
-                    if len(downloadable) == 1 && old == 0 {
-                        currentPiece = downloadable[0]
-                        downloadable = []int{}
-
-                        if !pieceRequests[currentPiece] {
-                            // mark piece as being downloaded by this peer
-                            pieceRequests[currentPiece] = true
-                            
-                            // send new state
-                            conn.WriteInterested()
-                            if err != nil {
-                                fmt.Println(err)
-                                return
-                            }
-                            interesting = true
-                        }
-                    }
 			case message.IDBitfield:
-					bitfield := msg.Payload.Bitfield()
-
-					// Detect peer downloaded pieces
-					for index, processing := range pieceDone {
-						if bitfield.Get(index) && !processing {
-							downloadable = append(downloadable, index)
-						}
-					}
-
-                    fmt.Printf("%s HAS %d PIECES\n", peer.Addr(), len(downloadable))
-                    
-
+					bitfield = msg.Payload.Bitfield()
 
                     // Select first piece
-                    for len(downloadable) != 0 {
-                        index := rand.Intn(len(downloadable))
-						currentPiece = downloadable[index]
-                        downloadable = append(downloadable[:index], downloadable[index+1:]...)
+                    for range pieceRequests {
+                        index := rand.Intn(len(pieceRequests))
 
-                        if pieceRequests[currentPiece] {
-                            continue
+                        if !bitfield.Get(index) || pieceRequests[index] {
+                           continue    
                         }
 
-						// mark piece as being downloaded by this peer
-						pieceRequests[currentPiece] = true
+                        currentPiece = index
+                        pieceRequests[index] = true
 
-                        // send new state
                         _, err = conn.WriteInterested()
                         if err != nil {
                             fmt.Println(err)
 							return
                         }
 						interesting = true
+
                         break
                     }
 				}
