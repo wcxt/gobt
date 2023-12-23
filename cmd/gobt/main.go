@@ -4,7 +4,6 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"math"
-	"math/rand"
 	"os"
 	"time"
 
@@ -54,9 +53,8 @@ func main() {
 		return
 	}
 
-	pieceRequests := make([]bool, len(hashes))
-	pieceDone := make([]bool, len(hashes))
-    pieceCounter := len(hashes)
+	pq := gobt.NewPieceQueue(len(hashes))
+	pieceCounter := len(hashes)
 
 	for _, peer := range peers {
 		go func(peer gobt.AnnouncePeer) {
@@ -112,7 +110,7 @@ func main() {
 						return
 					}
 					timer.Reset(MaxPeerTimeout)
-                    continue
+					continue
 				}
 
 				switch msg.ID {
@@ -120,12 +118,12 @@ func main() {
 					for _, req := range requestQueue {
 						currentBlock = int(req.Offset) / MaxBlockLength
 						if int(req.Index) != currentPiece {
-                            pieceRequests[currentPiece] = false
+							pq.MarkNotRequested(currentPiece)
 							currentPiece = int(req.Index)
 						}
 					}
 
-                    requestQueue = []message.Request{}
+					requestQueue = []message.Request{}
 				//case message.IDInterested:
 				//case message.IDNotInterested:
 				case message.IDPiece:
@@ -137,20 +135,21 @@ func main() {
 
 					if len(blockBuffer) == metainfo.Info.PieceLength {
 						blocksHash := sha1.Sum(blockBuffer)
-                        pieceCounter--
+						pieceCounter--
 
 						if blocksHash == hashes[block.Index] {
-							pieceDone[block.Index] = true
+							pq.MarkDone(int(block.Index))
 
-                            fmt.Printf("%s GOT: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter) 
+							fmt.Printf("%s GOT: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
 
-                            _, err = conn.WriteHave(int(block.Index))
-                            if err != nil {
-                                return
-                            }
+							_, err = conn.WriteHave(int(block.Index))
+							if err != nil {
+								return
+							}
 						} else {
 							hashFails += 1
-							pieceRequests[block.Index] = false
+							fmt.Printf("%s GOT FAILED: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
+							pq.MarkNotRequested(int(block.Index))
 						}
 						// else mark piece as not being downloaded
 						blockBuffer = []byte{}
@@ -179,39 +178,21 @@ func main() {
 							requestQueue = append(requestQueue, message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)})
 
 							if currentBlock == blocksPerPiece {
-                                // TEMP FIX but BUG
-                                oldCurrPiece := currentPiece 
+								index, err := pq.Dequeue(bitfield)
+								if err != nil {
+									break
+								}
 
-                                for range pieceRequests {
-                                    index := rand.Intn(len(pieceRequests))
-
-                                    if !bitfield.Get(index) || pieceRequests[index] {
-                                       continue    
-                                    }
-
-                                    currentPiece = index
-                                    pieceRequests[index] = true
-
-                                    break
-                                }
-
-                                if oldCurrPiece == currentPiece {
-                                    break
-                                }
+								currentPiece = index
+								pq.MarkRequested(index)
 
 								currentBlock = 0
 							}
 						}
 					}
 
-                    allDone := true
-                    for i := range pieceRequests {
-                        if bitfield.Get(i) && !pieceDone[i] {
-                            allDone = false
-                        }
-                    }
-
-					if allDone && interesting && len(requestQueue) == 0 {
+                    _, err := pq.Dequeue(bitfield)
+					if err != nil && interesting && len(requestQueue) == 0 {
 						_, err := conn.WriteNotInterested()
 						if err != nil {
 							fmt.Println(err)
@@ -237,25 +218,13 @@ func main() {
 							requestQueue = append(requestQueue, message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)})
 
 							if currentBlock == blocksPerPiece {
-                                // TEMP FIX but BUG
-                                oldCurrPiece := currentPiece 
+								index, err := pq.Dequeue(bitfield)
+								if err != nil {
+									break
+								}
 
-                                for range pieceRequests {
-                                    index := rand.Intn(len(pieceRequests))
-
-                                    if !bitfield.Get(index) || pieceRequests[index] {
-                                       continue    
-                                    }
-
-                                    currentPiece = index
-                                    pieceRequests[index] = true
-
-                                    break
-                                }
-
-                                if oldCurrPiece == currentPiece {
-                                    break
-                                }
+								currentPiece = index
+								pq.MarkRequested(index)
 
 								currentBlock = 0
 							}
@@ -263,31 +232,25 @@ func main() {
 					}
 				case message.IDHave:
 					have := int(msg.Payload.Have())
-                    bitfield.Set(have)
+					bitfield.Set(have)
 
-			case message.IDBitfield:
+				case message.IDBitfield:
 					bitfield = msg.Payload.Bitfield()
 
-                    // Select first piece
-                    for range pieceRequests {
-                        index := rand.Intn(len(pieceRequests))
+					// Select first piece
+					index, err := pq.Dequeue(bitfield)
+					if err == nil {
+						currentPiece = index
+						pq.MarkRequested(index)
 
-                        if !bitfield.Get(index) || pieceRequests[index] {
-                           continue    
-                        }
-
-                        currentPiece = index
-                        pieceRequests[index] = true
-
-                        _, err = conn.WriteInterested()
-                        if err != nil {
-                            fmt.Println(err)
+						_, err = conn.WriteInterested()
+						if err != nil {
+							fmt.Println(err)
 							return
-                        }
+						}
 						interesting = true
+					}
 
-                        break
-                    }
 				}
 			}
 		}(peer)
