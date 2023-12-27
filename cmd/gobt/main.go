@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/edwces/gobt"
+	"github.com/edwces/gobt/bitfield"
 	"github.com/edwces/gobt/message"
 )
 
@@ -80,7 +81,7 @@ func main() {
 			//interested := false
 			blocksPerPiece := int(math.Ceil(float64(metainfo.Info.PieceLength) / float64(MaxBlockLength)))
 
-			var bitfield gobt.Bitfield
+            bf := bitfield.New(len(hashes))
 			blockBuffer := []byte{}
 
 			requestQueue := []message.Request{}
@@ -191,7 +192,7 @@ func main() {
 							requestQueue = append(requestQueue, message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)})
 
 							if currentBlock == blocksPerPiece {
-								index, err := pq.Dequeue(bitfield)
+								index, err := pq.Dequeue(bf)
 								if err != nil {
 									break
 								}
@@ -204,7 +205,7 @@ func main() {
 						}
 					}
 
-                    _, err := pq.Dequeue(bitfield)
+                    _, err := pq.Dequeue(bf)
 					if err != nil && interesting && len(requestQueue) == 0 {
 						_, err := conn.WriteNotInterested()
 						if err != nil {
@@ -231,7 +232,7 @@ func main() {
 							requestQueue = append(requestQueue, message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)})
 
 							if currentBlock == blocksPerPiece {
-								index, err := pq.Dequeue(bitfield)
+								index, err := pq.Dequeue(bf)
 								if err != nil {
 									break
 								}
@@ -245,13 +246,24 @@ func main() {
 					}
 				case message.IDHave:
 					have := int(msg.Payload.Have())
-					bitfield.Set(have, true)
+                    err := bf.Set(have, true)
+
+                    if err != nil {
+                        fmt.Printf("Bitfield: %w\n", err)
+                        return
+                    } 
 
 				case message.IDBitfield:
-					bitfield = gobt.Bitfield(msg.Payload.Bitfield())
+                    err := bf.Replace(msg.Payload.Bitfield())
 
+                    if err != nil {
+                        fmt.Printf("Bitfield: %w\n", err)
+                        return
+                    }
+                    
+                    conn.WriteUnchoke()
 					// Select first piece
-					index, err := pq.Dequeue(bitfield)
+					index, err := pq.Dequeue(bf)
 					if err == nil {
 						currentPiece = index
 						pq.MarkRequested(index)

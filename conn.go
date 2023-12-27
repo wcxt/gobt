@@ -69,6 +69,10 @@ func (c *Conn) KeepAlive() (int, error) {
     return message.Write(c.conn, nmsg)
 }
 
+func (c *Conn) WriteUnchoke() (int, error) {
+    return c.WriteMsg(message.IDUnchoke, nil)
+}
+
 func (c *Conn) WriteInterested() (int, error) {
     return c.WriteMsg(message.IDInterested, nil)
 }

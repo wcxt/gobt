@@ -2,7 +2,10 @@ package gobt
 
 import (
 	"errors"
+	"fmt"
 	"sync"
+
+	"github.com/edwces/gobt/bitfield"
 )
 
 type PieceQueue struct {
@@ -22,12 +25,29 @@ func NewPieceQueue(length int) *PieceQueue {
 func (pt *PieceQueue) MarkDone(index int) {
 	pt.Lock()
 	pt.done[index] = true
+    count := 0
+    for _, val := range pt.done {
+        if val {
+            count++
+        }
+    }
+    fmt.Printf("DONE: %d\n", count)
+
 	pt.Unlock()
 }
 
 func (pt *PieceQueue) MarkRequested(index int) {
 	pt.Lock()
 	pt.requests[index] = true
+    count := 0
+    for _, val := range pt.requests {
+        if val {
+            count++
+        }
+    }
+    fmt.Printf("REQUESTS: %d\n", count)
+
+
 	pt.Unlock()
 }
 
@@ -43,12 +63,18 @@ func (pt *PieceQueue) MarkNotRequested(index int) {
 	pt.Unlock()
 }
 
-func (pt *PieceQueue) Dequeue(bitfield Bitfield) (int, error) {
+func (pt *PieceQueue) Dequeue(bitfield bitfield.Bitfield) (int, error) {
 	pt.Lock()
 	defer pt.Unlock()
 
 	for i, requested := range pt.requests {
-		if bitfield.Get(i) && !requested {
+        val, err := bitfield.Get(i)
+        
+        if err != nil {
+            return -1, errors.New("No available pieces to deque from bitfield")
+        }
+
+		if val && !requested {
 			return i, nil
 		}
 	}
