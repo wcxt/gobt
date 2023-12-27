@@ -137,11 +137,11 @@ func main() {
 
 					if len(blockBuffer) == metainfo.Info.PieceLength {
 						blocksHash := sha1.Sum(blockBuffer)
-						pieceCounter--
 
 						if blocksHash == hashes[block.Index] {
 							pq.MarkDone(int(block.Index))
 
+                            pieceCounter--
 							fmt.Printf("%s GOT: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
 
 							_, err = conn.WriteHave(int(block.Index))
@@ -160,6 +160,17 @@ func main() {
 					requestQueue = requestQueue[1:]
 
 					if hashFails >= MaxHashFails {
+                        reqpiece := int(block.Index)
+                        for _, req := range requestQueue {
+                            if reqpiece != int(req.Index) {
+                                pq.MarkNotRequested(int(req.Index))
+                                reqpiece = int(req.Index)
+                            }
+                        }
+
+                        if currentPiece != reqpiece {
+                            pq.MarkNotRequested(currentPiece)
+                        }
 						fmt.Println("Excedded Maximum hash fails: 5")
 						return
 					}
