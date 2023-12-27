@@ -105,12 +105,14 @@ func main() {
 					return
 				}
 
-				if msg.KeepAlive {
-					if !timer.Stop() {
+                if !timer.Stop() {
 						return
-					}
-					timer.Reset(MaxPeerTimeout)
-					continue
+                }
+                timer.Reset(MaxPeerTimeout)
+
+
+				if msg.KeepAlive {
+                    continue
 				}
 
 				switch msg.ID {

@@ -53,5 +53,5 @@ func (pt *PieceQueue) Dequeue(bitfield Bitfield) (int, error) {
 		}
 	}
 
-    return -1, errors.New("No available pieces to deque from bitfield") 
+	return -1, errors.New("No available pieces to deque from bitfield")
 }
