@@ -21,6 +21,19 @@ const (
     IDPort
 )
 
+var stringMap = map[ID]string{
+    IDChoke: "CHOKE",
+    IDUnchoke: "UNCHOKE",
+    IDInterested: "INTERESTED",
+    IDNotInterested: "NOTINTERESTED",
+    IDHave: "HAVE",
+    IDBitfield: "BITFIELD",
+    IDRequest: "REQUEST",
+    IDPiece: "PIECE",
+    IDCancel: "CANCEL",
+    IDPort: "PORT",
+}
+
 type Message struct {
     KeepAlive bool
     ID ID
@@ -32,6 +45,10 @@ func (msg *Message) Len() uint32 {
         return 0
     }
     return uint32(1 + len(msg.Payload))
+}
+
+func (msg *Message) String() string {
+    return stringMap[msg.ID]
 }
 
 func Read(r io.Reader) (*Message, error) {
