@@ -80,7 +80,7 @@ func main() {
 			//interested := false
 			blocksPerPiece := int(math.Ceil(float64(metainfo.Info.PieceLength) / float64(MaxBlockLength)))
 
-			var bitfield message.Bitfield
+			var bitfield gobt.Bitfield
 			blockBuffer := []byte{}
 
 			requestQueue := []message.Request{}
@@ -232,10 +232,10 @@ func main() {
 					}
 				case message.IDHave:
 					have := int(msg.Payload.Have())
-					bitfield.Set(have)
+					bitfield.Set(have, true)
 
 				case message.IDBitfield:
-					bitfield = msg.Payload.Bitfield()
+					bitfield = gobt.Bitfield(msg.Payload.Bitfield())
 
 					// Select first piece
 					index, err := pq.Dequeue(bitfield)

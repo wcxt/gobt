@@ -3,8 +3,6 @@ package gobt
 import (
 	"errors"
 	"sync"
-
-	"github.com/edwces/gobt/message"
 )
 
 type PieceQueue struct {
@@ -45,7 +43,7 @@ func (pt *PieceQueue) MarkNotRequested(index int) {
 	pt.Unlock()
 }
 
-func (pt *PieceQueue) Dequeue(bitfield message.Bitfield) (int, error) {
+func (pt *PieceQueue) Dequeue(bitfield Bitfield) (int, error) {
 	pt.Lock()
 	defer pt.Unlock()
 
