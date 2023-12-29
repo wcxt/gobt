@@ -54,7 +54,7 @@ func main() {
 		return
 	}
 
-	pq := gobt.NewPieceQueue(len(hashes))
+    pp := gobt.NewPiecePicker(len(hashes))
 	pieceCounter := len(hashes)
 
 	for _, peer := range peers {
@@ -121,7 +121,7 @@ func main() {
 					for _, req := range requestQueue {
 						currentBlock = int(req.Offset) / MaxBlockLength
 						if int(req.Index) != currentPiece {
-							pq.MarkNotRequested(currentPiece)
+							pp.Add(currentPiece)
 							currentPiece = int(req.Index)
 						}
 					}
@@ -140,7 +140,7 @@ func main() {
 						blocksHash := sha1.Sum(blockBuffer)
 
 						if blocksHash == hashes[block.Index] {
-							pq.MarkDone(int(block.Index))
+							pp.Remove(currentPiece)
 
                             pieceCounter--
 							fmt.Printf("%s GOT: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
@@ -152,7 +152,7 @@ func main() {
 						} else {
 							hashFails += 1
 							fmt.Printf("%s GOT FAILED: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
-							pq.MarkNotRequested(int(block.Index))
+							pp.Add(currentPiece)
 						}
 						// else mark piece as not being downloaded
 						blockBuffer = []byte{}
@@ -164,13 +164,13 @@ func main() {
                         reqpiece := int(block.Index)
                         for _, req := range requestQueue {
                             if reqpiece != int(req.Index) {
-                                pq.MarkNotRequested(int(req.Index))
+                                pp.Add(int(req.Index))
                                 reqpiece = int(req.Index)
                             }
                         }
 
                         if currentPiece != reqpiece {
-                            pq.MarkNotRequested(currentPiece)
+                            pp.Add(currentPiece)
                         }
 						fmt.Println("Excedded Maximum hash fails: 5")
 						return
@@ -192,21 +192,18 @@ func main() {
 							requestQueue = append(requestQueue, message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)})
 
 							if currentBlock == blocksPerPiece {
-								index, err := pq.Dequeue(bf)
+								index, err := pp.Pick(bf)
 								if err != nil {
 									break
 								}
 
 								currentPiece = index
-								pq.MarkRequested(index)
-
 								currentBlock = 0
 							}
 						}
 					}
 
-                    _, err := pq.Dequeue(bf)
-					if err != nil && interesting && len(requestQueue) == 0 {
+					if interesting && len(requestQueue) == 0 {
 						_, err := conn.WriteNotInterested()
 						if err != nil {
 							fmt.Println(err)
@@ -232,14 +229,12 @@ func main() {
 							requestQueue = append(requestQueue, message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)})
 
 							if currentBlock == blocksPerPiece {
-								index, err := pq.Dequeue(bf)
+								index, err := pp.Pick(bf)
 								if err != nil {
 									break
 								}
 
 								currentPiece = index
-								pq.MarkRequested(index)
-
 								currentBlock = 0
 							}
 						}
@@ -249,7 +244,7 @@ func main() {
                     err := bf.Set(have, true)
 
                     if err != nil {
-                        fmt.Printf("Bitfield: %w\n", err)
+                        fmt.Printf("Bitfield: %v\n", err)
                         return
                     } 
 
@@ -257,16 +252,17 @@ func main() {
                     err := bf.Replace(msg.Payload.Bitfield())
 
                     if err != nil {
-                        fmt.Printf("Bitfield: %w\n", err)
+                        fmt.Printf("Bitfield: %v\n", err)
                         return
                     }
                     
                     conn.WriteUnchoke()
+
 					// Select first piece
-					index, err := pq.Dequeue(bf)
+					index, err := pp.Pick(bf)
+
 					if err == nil {
 						currentPiece = index
-						pq.MarkRequested(index)
 
 						_, err = conn.WriteInterested()
 						if err != nil {

@@ -2,82 +2,59 @@ package gobt
 
 import (
 	"errors"
-	"fmt"
-	"sync"
 
 	"github.com/edwces/gobt/bitfield"
 )
 
-type PieceQueue struct {
-	sync.Mutex
-
-	requests []bool
-	done     []bool
+type PiecePicker struct {
+    pieces []int
+    picked []int
 }
 
-func NewPieceQueue(length int) *PieceQueue {
-	return &PieceQueue{
-		requests: make([]bool, length),
-		done:     make([]bool, length),
-	}
+func NewPiecePicker(size int) *PiecePicker {
+    pieces := make([]int, size)
+    
+    for i := 0; i < size; i++ {
+        pieces[i] = i
+    }
+
+    return &PiecePicker{pieces: pieces, picked: []int{}}
 }
 
-func (pt *PieceQueue) MarkDone(index int) {
-	pt.Lock()
-	pt.done[index] = true
-    count := 0
-    for _, val := range pt.done {
-        if val {
-            count++
+func (pp *PiecePicker) Pick(has bitfield.Bitfield) (int, error) {
+    for i, index := range pp.pieces {
+        if got, _ := has.Get(index); got {
+            pp.pieces = append(pp.pieces[:i], pp.pieces[i+1:]...)
+            return index, nil
         }
     }
-    fmt.Printf("DONE: %d\n", count)
 
-	pt.Unlock()
+    return 0, errors.New("No piece found")
 }
 
-func (pt *PieceQueue) MarkRequested(index int) {
-	pt.Lock()
-	pt.requests[index] = true
-    count := 0
-    for _, val := range pt.requests {
-        if val {
-            count++
+func (pp *PiecePicker) Add(pi int) {
+    for i, index := range pp.picked {
+        if index == pi {
+            pp.picked = append(pp.picked[:i], pp.picked[i+1:]...)
+            pp.pieces = append([]int{pi}, pp.pieces...)
         }
     }
-    fmt.Printf("REQUESTS: %d\n", count)
 
-
-	pt.Unlock()
+    pp.pieces = append([]int{pi}, pp.pieces...)
 }
 
-func (pt *PieceQueue) MarkNotDone(index int) {
-	pt.Lock()
-	pt.done[index] = false
-	pt.Unlock()
-}
-
-func (pt *PieceQueue) MarkNotRequested(index int) {
-	pt.Lock()
-	pt.requests[index] = false
-	pt.Unlock()
-}
-
-func (pt *PieceQueue) Dequeue(bitfield bitfield.Bitfield) (int, error) {
-	pt.Lock()
-	defer pt.Unlock()
-
-	for i, requested := range pt.requests {
-        val, err := bitfield.Get(i)
-        
-        if err != nil {
-            return -1, errors.New("No available pieces to deque from bitfield")
+func (pp *PiecePicker) Remove(pi int) {
+     for i, index := range pp.picked {
+        if index == pi {
+            pp.picked = append(pp.picked[:i], pp.picked[i+1:]...)
+            return 
         }
+    }
 
-		if val && !requested {
-			return i, nil
-		}
-	}
-
-	return -1, errors.New("No available pieces to deque from bitfield")
+    for i, index := range pp.pieces {
+        if index == pi {
+            pp.pieces = append(pp.pieces[:i], pp.pieces[i+1:]...)
+            return 
+        }
+    }
 }
