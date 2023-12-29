@@ -241,7 +241,7 @@ func main() {
 					}
 				case message.IDHave:
 					have := int(msg.Payload.Have())
-                    err := bf.Set(have, true)
+                    err := bf.Set(have)
 
                     if err != nil {
                         fmt.Printf("Bitfield: %v\n", err)
@@ -257,8 +257,6 @@ func main() {
                     }
                     
                     conn.WriteUnchoke()
-
-					// Select first piece
 					index, err := pp.Pick(bf)
 
 					if err == nil {

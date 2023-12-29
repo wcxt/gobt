@@ -12,8 +12,10 @@ type bitfield struct {
 
 type Bitfield interface {
     Replace([]byte) error
-    Set(int, bool) error
+    Set(int) error
+    Clear(int) error
     Get(int) (bool, error)
+
 }
 
 func New(size int) Bitfield {
@@ -34,31 +36,35 @@ func (bf *bitfield) Replace(data []byte) error {
     return nil
 }
 
-func (bf *bitfield) Set(i int, val bool) error {
+func (bf *bitfield) Set(i int) error {
     if i >= bf.size || i < 0 {
         return fmt.Errorf("invalid index value: %d", i)
     }
 
-	byteI := i / 8
-	bitI := i % 8
-
-    if val {
-	    bf.field[byteI] |= 0b10000000 >> bitI
-    } else {
-        bf.field[byteI] &= 0b01111111 >> bitI
-    }
-
+    index := i / 8
+    offset := i % 8
+    bf.field[index] |= 0b10000000 >> offset
     return nil
 }
 
-func (bf bitfield) Get(i int) (bool, error) {
+func (bf *bitfield) Clear(i int) error {
+    if i >= bf.size || i < 0 {
+        return fmt.Errorf("invalid index value: %d", i)
+    }
+
+    index := i / 8
+    offset := i % 8
+    bf.field[index] &= 0b01111111 >> offset
+    return nil
+}
+
+func (bf *bitfield) Get(i int) (bool, error) {
     if i >= bf.size || i < 0 {
         return false, fmt.Errorf("invalid index value: %d", i)
     }
 
-	byteI := i / 8
-	bitI := i % 8
-	val := int(bf.field[byteI] & (0b10000000 >> bitI))
-
-	return val != 0, nil
+    index := i / 8
+    offset := i % 8
+	bit := bf.field[index] & (0b10000000 >> offset)
+	return bit != 0, nil
 }

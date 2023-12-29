@@ -45,22 +45,18 @@ func TestBitfieldReplace(t *testing.T) {
 func TestBitfieldSet(t *testing.T) {
 	tests := map[string]struct {
 		index int
-		value bool
 		error bool
 	}{
 		"unreacheable high index": {
 			index: 32,
-			value: true,
 			error: true,
 		},
 		"unreacheable low index": {
 			index: -1,
-			value: true,
 			error: true,
 		},
 		"valid index": {
 			index: 16,
-			value: true,
 			error: false,
 		},
 	}
@@ -69,7 +65,7 @@ func TestBitfieldSet(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			bf := bitfield.New(32)
 
-			err := bf.Set(test.index, test.value)
+			err := bf.Set(test.index)
 
 			if err != nil && !test.error {
 				t.Fatalf("got error: %s, want error: nil", err.Error())
@@ -81,6 +77,44 @@ func TestBitfieldSet(t *testing.T) {
 		})
 	}
 }
+
+func TestBitfieldClear(t *testing.T) {
+	tests := map[string]struct {
+		index int
+		error bool
+	}{
+		"unreacheable high index": {
+			index: 32,
+			error: true,
+		},
+		"unreacheable low index": {
+			index: -1,
+			error: true,
+		},
+		"valid index": {
+			index: 16,
+			error: false,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			bf := bitfield.New(32)
+
+			err := bf.Set(test.index)
+
+			if err != nil && !test.error {
+				t.Fatalf("got error: %s, want error: nil", err.Error())
+			}
+
+			if err == nil && test.error {
+				t.Fatalf("got error: nil, want error: error")
+			}
+		})
+	}
+}
+
+
 
 func TestBitfieldGet(t *testing.T) {
 	tests := map[string]struct {
