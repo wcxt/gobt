@@ -259,17 +259,18 @@ func main() {
                     conn.WriteUnchoke()
 					index, err := pp.Pick(bf)
 
-					if err == nil {
-						currentPiece = index
+					if err != nil {
+                        break
+                    }
+						
+                    currentPiece = index
 
-						_, err = conn.WriteInterested()
-						if err != nil {
-							fmt.Println(err)
-							return
-						}
-						interesting = true
+					_, err = conn.WriteInterested()
+					if err != nil {
+						fmt.Println(err)
+						return
 					}
-
+					interesting = true
 				}
 			}
 		}(peer)
