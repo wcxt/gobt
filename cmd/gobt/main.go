@@ -3,13 +3,13 @@ package main
 import (
 	"crypto/sha1"
 	"fmt"
-	"math"
 	"os"
 	"time"
 
 	"github.com/edwces/gobt"
 	"github.com/edwces/gobt/bitfield"
 	"github.com/edwces/gobt/message"
+	"github.com/edwces/gobt/picker"
 )
 
 const (
@@ -54,8 +54,10 @@ func main() {
 		return
 	}
 
-    pp := gobt.NewPiecePicker(len(hashes))
+	pp := picker.New(metainfo.Info.Length, metainfo.Info.PieceLength)
 	pieceCounter := len(hashes)
+	maxBlocks := metainfo.Info.PieceLength / 16000
+	filepieces := make([][][]byte, len(hashes))
 
 	for _, peer := range peers {
 		go func(peer gobt.AnnouncePeer) {
@@ -79,18 +81,12 @@ func main() {
 			interesting := false
 			//choking := true
 			//interested := false
-			blocksPerPiece := int(math.Ceil(float64(metainfo.Info.PieceLength) / float64(MaxBlockLength)))
-
-            bf := bitfield.New(len(hashes))
-			blockBuffer := []byte{}
-
-			requestQueue := []message.Request{}
+			bf := bitfield.New(len(hashes))
+			reqBacklog := 0
+			picked := []*picker.Block{}
 
 			// TODO: Pipeline requests
 			// Request vars
-			currentPiece := 0
-			currentBlock := 0
-
 			timer := time.NewTimer(MaxPeerTimeout)
 			defer timer.Stop()
 
@@ -106,43 +102,46 @@ func main() {
 					return
 				}
 
-                if !timer.Stop() {
-						return
-                }
-                timer.Reset(MaxPeerTimeout)
-
+				if !timer.Stop() {
+					return
+				}
+				timer.Reset(MaxPeerTimeout)
 
 				if msg.KeepAlive {
-                    continue
+					continue
 				}
 
 				switch msg.ID {
 				case message.IDChoke:
-					for _, req := range requestQueue {
-						currentBlock = int(req.Offset) / MaxBlockLength
-						if int(req.Index) != currentPiece {
-							pp.Add(currentPiece)
-							currentPiece = int(req.Index)
-						}
+					for _, block := range picked {
+						pp.Return(block)
 					}
-
-					requestQueue = []message.Request{}
-				//case message.IDInterested:
-				//case message.IDNotInterested:
+					picked = []*picker.Block{}
 				case message.IDPiece:
 					block := msg.Payload.Block()
-					//fmt.Println(block.Index, block.Offset)
+                    
+					// Remove cb from array of picked
+					cb := picked[len(picked)-1]
+					picked := picked[:len(picked)-1]
+					reqBacklog--
 
-					// Save to downloaded blocks in a piece
-					blockBuffer = append(blockBuffer, block.Block...)
+					pp.Done(cb)
 
-					if len(blockBuffer) == metainfo.Info.PieceLength {
-						blocksHash := sha1.Sum(blockBuffer)
+					// Add piece content to buffer
+					if filepieces[cb.Piece.Index] == nil {
+						filepieces[cb.Piece.Index] = make([][]byte, maxBlocks)
+					}
+					filepieces[cb.Piece.Index][cb.Index] = block.Block
 
+					if cb.Piece.Done {
+						buffer := []byte{}
+						for _, b := range filepieces[cb.Piece.Index] {
+							buffer = append(buffer, b...)
+						}
+
+						blocksHash := sha1.Sum(buffer)
 						if blocksHash == hashes[block.Index] {
-							pp.Remove(currentPiece)
-
-                            pieceCounter--
+							pieceCounter--
 							fmt.Printf("%s GOT: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
 
 							_, err = conn.WriteHave(int(block.Index))
@@ -152,125 +151,92 @@ func main() {
 						} else {
 							hashFails += 1
 							fmt.Printf("%s GOT FAILED: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
-							pp.Add(currentPiece)
+							pp.Add(cb.Piece.Index)
 						}
-						// else mark piece as not being downloaded
-						blockBuffer = []byte{}
 					}
 
-					requestQueue = requestQueue[1:]
-
 					if hashFails >= MaxHashFails {
-                        reqpiece := int(block.Index)
-                        for _, req := range requestQueue {
-                            if reqpiece != int(req.Index) {
-                                pp.Add(int(req.Index))
-                                reqpiece = int(req.Index)
-                            }
-                        }
-
-                        if currentPiece != reqpiece {
-                            pp.Add(currentPiece)
-                        }
+						for _, block := range picked {
+							pp.Return(block)
+						}
 						fmt.Println("Excedded Maximum hash fails: 5")
 						return
 					}
 
-					for i := len(requestQueue); i < MaxPipelinedRequests; i++ {
-						if interesting {
-							offset := currentBlock * MaxBlockLength
-							length := math.Min(float64(metainfo.Info.PieceLength-offset), float64(MaxBlockLength))
-
-							_, err := conn.WriteRequest(currentPiece, offset, int(length))
-							if err != nil {
-								fmt.Println(err)
-								return
-							}
-							currentBlock += 1
-
-							// Put request in pipeline
-							requestQueue = append(requestQueue, message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)})
-
-							if currentBlock == blocksPerPiece {
-								index, err := pp.Pick(bf)
-								if err != nil {
-									break
-								}
-
-								currentPiece = index
-								currentBlock = 0
-							}
-						}
-					}
-
-					if interesting && len(requestQueue) == 0 {
-						_, err := conn.WriteNotInterested()
+					for i := reqBacklog; i < MaxPipelinedRequests && interesting; i++ {
+						// Send request
+						req := picked[0]
+						_, err := conn.WriteRequest(req.Piece.Index, req.Offset, req.Length)
 						if err != nil {
 							fmt.Println(err)
 							return
 						}
-						interesting = false
-					}
+						reqBacklog++
 
-				case message.IDUnchoke:
-					for i := len(requestQueue); i < MaxPipelinedRequests; i++ {
-						if interesting {
-							offset := currentBlock * MaxBlockLength
-							length := math.Min(float64(metainfo.Info.PieceLength-offset), float64(MaxBlockLength))
-
-							_, err := conn.WriteRequest(currentPiece, offset, int(length))
+						// Choose new piece
+						cb, err := pp.Pick(bf)
+                        picked = append([]*picker.Block{cb}, picked...)
+						if err != nil {
+							_, err := conn.WriteNotInterested()
 							if err != nil {
 								fmt.Println(err)
 								return
 							}
-							currentBlock += 1
+							interesting = false
+						}
+					}
 
-							// Put request in pipeline
-							requestQueue = append(requestQueue, message.Request{Index: uint32(currentPiece), Offset: uint32(offset), Length: uint32(length)})
+				case message.IDUnchoke:
+					for i := reqBacklog; i < MaxPipelinedRequests && interesting; i++ {
+						// Send request
+						req := picked[0]
+						_, err := conn.WriteRequest(req.Piece.Index, req.Offset, req.Length)
+						if err != nil {
+							fmt.Println(err)
+							return
+						}
+						reqBacklog++
 
-							if currentBlock == blocksPerPiece {
-								index, err := pp.Pick(bf)
-								if err != nil {
-									break
-								}
-
-								currentPiece = index
-								currentBlock = 0
+						// Choose new piece
+						cb, err := pp.Pick(bf)
+                        picked = append([]*picker.Block{cb}, picked...)
+						if err != nil {
+							_, err := conn.WriteNotInterested()
+							if err != nil {
+								fmt.Println(err)
+								return
 							}
+							interesting = false
 						}
 					}
 				case message.IDHave:
 					have := int(msg.Payload.Have())
-                    err := bf.Set(have)
-
-                    if err != nil {
-                        fmt.Printf("Bitfield: %v\n", err)
-                        return
-                    } 
-
-				case message.IDBitfield:
-                    err := bf.Replace(msg.Payload.Bitfield())
-
-                    if err != nil {
-                        fmt.Printf("Bitfield: %v\n", err)
-                        return
-                    }
-                    
-                    conn.WriteUnchoke()
-					index, err := pp.Pick(bf)
+					err := bf.Set(have)
 
 					if err != nil {
-                        break
-                    }
-						
-                    currentPiece = index
-
-					_, err = conn.WriteInterested()
-					if err != nil {
-						fmt.Println(err)
+						fmt.Printf("Bitfield: %v\n", err)
 						return
 					}
-					interesting = true
+
+				case message.IDBitfield:
+					err := bf.Replace(msg.Payload.Bitfield())
+					if err != nil {
+						fmt.Printf("Bitfield: %v\n", err)
+						return
+					}
+
+					cb, err := pp.Pick(bf)
+					if err == nil {
+						picked = append([]*picker.Block{cb}, picked...)
+						_, err := conn.WriteInterested()
+						if err != nil {
+							fmt.Println(err)
+							return
+						}
+						interesting = true
+					}
+
+					conn.WriteUnchoke()
 				}
 			}
 		}(peer)

@@ -1,6 +1,7 @@
 package picker
 
 import (
+	"errors"
 	"math"
 
 	"github.com/edwces/gobt/bitfield"
@@ -9,18 +10,31 @@ import (
 const DefaultMaxBlockLength = 16000
 
 type Picker interface {
-    Pick(bitfield.Bitfield) (int, int)
+    Pick(bitfield.Bitfield) (*Block, error)
+    Done(*Block) 
+    Return(*Block) 
+    Add(i int)
 }
 
-type piece struct {
-    index int
+type Piece struct {
+    Index int
+    Done bool
 
-    bLeft int
-    bPicked []int
+    bOrdered []int
+    bStates []*Block
+}
+
+type Block struct {
+    Piece *Piece
+    Index int
+    Done bool
+
+    Offset int
+    Length int 
 }
 
 type picker struct {
-    pStates map[int]*piece
+    pStates map[int]*Piece
     pOrdered []int
     pPicked []int
     pMaxLength int
@@ -33,7 +47,7 @@ func New(length, pMaxLength int) Picker {
     
     p.pOrdered = []int{}
     p.pPicked = []int{}
-    p.pStates = map[int]*piece{}
+    p.pStates = map[int]*Piece{}
 
     for i := 0; i < p.pieceCount(); i++ {
         p.pOrdered = append(p.pOrdered, i)
@@ -54,45 +68,89 @@ func (p *picker) blockCount(i int) int {
     return p.pieceLength(i) / DefaultMaxBlockLength
 }
 
-func (p *picker) Pick(has bitfield.Bitfield) (int, int) {
-    pi := p.pickPiece(has)
-    if pi == -1 {
-        return -1, -1
-    }
-    
-    state := p.getPieceState(pi)
-    bi := p.pickBlock(state)
-
-    return pi, bi
+func (p *picker) blockLength(pi, bi int) int {
+    return int(math.Min(float64(DefaultMaxBlockLength), float64(p.pieceLength(pi) - bi * DefaultMaxBlockLength)))
 }
 
-func (p *picker) getPieceState(i int) *piece {
+func (p *picker) Return(block *Block) {
+    block.Done = false
+    block.Piece.bOrdered = append(block.Piece.bOrdered, block.Index)
+    if block.Piece.Done {
+        block.Piece.Done = false
+        p.pPicked = append(p.pPicked, block.Piece.Index)
+    }
+}
+
+func (p *picker) Add(i int) {
+    p.piece(i)
+    delete(p.pStates, i)
+
+    p.pOrdered = append(p.pOrdered, i)
+}
+
+func (p *picker) Done(block *Block) {
+    block.Done = true
+    
+    for _, b := range block.Piece.bStates {
+        if b == nil || b.Done == false {
+            return 
+        }
+    } 
+    
+    block.Piece.Done = true
+    for j, index := range p.pPicked {
+        if index == block.Piece.Index {
+            p.pPicked = append(p.pPicked[:j], p.pPicked[j+1:]...)
+            return
+        }
+    }
+}
+
+func (p *picker) Pick(has bitfield.Bitfield) (*Block, error) {
+    pi := p.pickPiece(has)
+    if pi == -1 {
+        return nil, errors.New("Piece not found")
+    }
+    
+    state := p.piece(pi)
+    bi := p.pickBlock(state)
+
+    block := &Block{Piece: state,
+                    Index: bi,
+                    Offset: bi * DefaultMaxBlockLength,
+                    Length: p.blockLength(pi, bi)}
+
+    state.bStates[block.Index] = block
+
+    return block, nil
+}
+
+func (p *picker) piece(i int) *Piece {
     state, exists := p.pStates[i]
 
     if !exists {
         bc := p.blockCount(i)
-        bPicked := []int{}
+        bOrdered := []int{}
 
         for j := 0; j < bc; j++ {
-            bPicked = append(bPicked, j)
+            bOrdered = append(bOrdered, j)
         }
 
-        state = &piece{index: i, bLeft: bc, bPicked: bPicked}
+        state = &Piece{Index: i, bOrdered: bOrdered, bStates: make([]*Block, bc)}
         p.pStates[i] = state
     }
 
     return state
 }
 
-func (p *picker) pickBlock(state *piece) int {
-    index := state.bPicked[0]
-    state.bPicked = state.bPicked[1:]
-    state.bLeft--
+func (p *picker) pickBlock(state *Piece) int {
+    index := state.bOrdered[0]
+    state.bOrdered = state.bOrdered[1:]
 
     // Stop tracking piece if all request have been made
-    if state.bLeft == 0 {
+    if len(state.bOrdered) == 0 {
          for j, i := range p.pPicked {
-            if i == state.index {
+            if i == state.Index {
                 p.pPicked = append(p.pPicked[:j], p.pPicked[j+1:]...) 
                 return index
             }
