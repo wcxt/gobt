@@ -9,7 +9,6 @@ import (
 	"github.com/edwces/gobt"
 	"github.com/edwces/gobt/bitfield"
 	"github.com/edwces/gobt/message"
-	"github.com/edwces/gobt/picker"
 )
 
 const (
@@ -119,10 +118,10 @@ func main() {
 					picked = []*picker.Block{}
 				case message.IDPiece:
 					block := msg.Payload.Block()
-                    
+
 					// Remove cb from array of picked
 					cb := picked[len(picked)-1]
-					picked := picked[:len(picked)-1]
+					picked = picked[:len(picked)-1]
 					reqBacklog--
 
 					pp.Done(cb)
@@ -142,7 +141,7 @@ func main() {
 						blocksHash := sha1.Sum(buffer)
 						if blocksHash == hashes[block.Index] {
 							pieceCounter--
-							fmt.Printf("%s GOT: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
+							fmt.Printf("-------------------------------------------------- %s GOT: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
 
 							_, err = conn.WriteHave(int(block.Index))
 							if err != nil {
@@ -150,7 +149,7 @@ func main() {
 							}
 						} else {
 							hashFails += 1
-							fmt.Printf("%s GOT FAILED: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
+							fmt.Printf("-------------------------------------------------- %s GOT FAILED: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
 							pp.Add(cb.Piece.Index)
 						}
 					}
@@ -175,7 +174,7 @@ func main() {
 
 						// Choose new piece
 						cb, err := pp.Pick(bf)
-                        picked = append([]*picker.Block{cb}, picked...)
+						picked = append([]*picker.Block{cb}, picked...)
 						if err != nil {
 							_, err := conn.WriteNotInterested()
 							if err != nil {
@@ -199,7 +198,7 @@ func main() {
 
 						// Choose new piece
 						cb, err := pp.Pick(bf)
-                        picked = append([]*picker.Block{cb}, picked...)
+						picked = append([]*picker.Block{cb}, picked...)
 						if err != nil {
 							_, err := conn.WriteNotInterested()
 							if err != nil {

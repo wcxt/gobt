@@ -58,8 +58,10 @@ func (c *Conn) WriteMsg(id message.ID, payload message.Payload) (int, error) {
     if err != nil {
         return wb, err
     }
-
-    fmt.Printf("%s WRITE: %s\n", c.conn.RemoteAddr().String(), nmsg.String())
+    
+    if nmsg.ID != message.IDRequest {
+        fmt.Printf("%s WRITE: %s\n", c.conn.RemoteAddr().String(), nmsg.String())
+    }
 
     return wb, nil
 }
@@ -83,6 +85,7 @@ func (c *Conn) WriteNotInterested() (int, error) {
 
 func (c *Conn) WriteRequest(index, offset, length int) (int, error) {
     req := message.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
+    fmt.Printf("%s WRITE REQUEST: %d %d %d\n", c.conn.RemoteAddr().String(), index, offset, length)
     payload := message.NewRequestPayload(req)
     return c.WriteMsg(message.IDRequest, payload)
 }

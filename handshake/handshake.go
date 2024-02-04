@@ -44,7 +44,7 @@ func Read(r io.Reader) (*Handshake, error) {
     if pstr != Pstr {
         return nil, fmt.Errorf("pstr unexpected value: %s", pstr)
     }
-    
+
     reserved := [8]byte(buf[pstrlen+1:pstrlen+9])
     infoHash := [20]byte(buf[pstrlen+9:pstrlen+29])
     peerId := [20]byte(buf[pstrlen+29:pstrlen+49])
