@@ -53,10 +53,11 @@ func main() {
 		return
 	}
 
-	pp := picker.New(metainfo.Info.Length, metainfo.Info.PieceLength)
+	pp := gobt.NewPicker(metainfo.Info.Length, metainfo.Info.PieceLength)
 	pieceCounter := len(hashes)
 	maxBlocks := metainfo.Info.PieceLength / 16000
 	filepieces := make([][][]byte, len(hashes))
+	clientBf := bitfield.New(len(hashes))
 
 	for _, peer := range peers {
 		go func(peer gobt.AnnouncePeer) {
@@ -216,7 +217,6 @@ func main() {
 						fmt.Printf("Bitfield: %v\n", err)
 						return
 					}
-
 				case message.IDBitfield:
 					err := bf.Replace(msg.Payload.Bitfield())
 					if err != nil {
@@ -224,9 +224,13 @@ func main() {
 						return
 					}
 
-					cb, err := pp.Pick(bf)
-					if err == nil {
-						picked = append([]*picker.Block{cb}, picked...)
+					diff, err := bf.Difference(clientBf)
+					if err != nil {
+						fmt.Printf("Bitfield: %v\n", err)
+						return
+					}
+
+					if !diff.Empty() {
 						_, err := conn.WriteInterested()
 						if err != nil {
 							fmt.Println(err)
@@ -234,8 +238,7 @@ func main() {
 						}
 						interesting = true
 					}
-
-					conn.WriteUnchoke()
+					// conn.WriteUnchoke()
 				}
 			}
 		}(peer)
