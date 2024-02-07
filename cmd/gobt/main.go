@@ -1,8 +1,8 @@
 package main
 
 import (
-	"crypto/sha1"
 	"fmt"
+	"math"
 	"os"
 	"time"
 
@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	MaxBlockLength       = 16000
 	MaxPipelinedRequests = 5
 	MaxHashFails         = 5
 	MaxPeerTimeout       = 2*time.Minute + 10*time.Second
@@ -54,9 +53,9 @@ func main() {
 	}
 
 	pp := gobt.NewPicker(metainfo.Info.Length, metainfo.Info.PieceLength)
-	pieceCounter := len(hashes)
-	maxBlocks := metainfo.Info.PieceLength / 16000
-	filepieces := make([][][]byte, len(hashes))
+	// pieceCounter := len(hashes)
+	// maxBlocks := metainfo.Info.PieceLength / 16000
+	// filepieces := make([][][]byte, len(hashes))
 	clientBf := bitfield.New(len(hashes))
 
 	for _, peer := range peers {
@@ -74,19 +73,13 @@ func main() {
 				return
 			}
 
-			hashFails := 0
-
 			// Message loop
-			//choked := true
 			interesting := false
-			//choking := true
-			//interested := false
-			bf := bitfield.New(len(hashes))
-			reqBacklog := 0
-			picked := []*picker.Block{}
 
-			// TODO: Pipeline requests
-			// Request vars
+			bf := bitfield.New(len(hashes))
+			reqQueue := [][]int{}
+			// hashFails := 0
+
 			timer := time.NewTimer(MaxPeerTimeout)
 			defer timer.Stop()
 
@@ -113,69 +106,54 @@ func main() {
 
 				switch msg.ID {
 				case message.IDChoke:
-					for _, block := range picked {
-						pp.Return(block)
-					}
-					picked = []*picker.Block{}
+					break
 				case message.IDPiece:
-					block := msg.Payload.Block()
+					reqQueue = reqQueue[1:]
 
-					// Remove cb from array of picked
-					cb := picked[len(picked)-1]
-					picked = picked[:len(picked)-1]
-					reqBacklog--
+					// reqBacklog--
 
-					pp.Done(cb)
+					// pp.Done(cb)
 
 					// Add piece content to buffer
-					if filepieces[cb.Piece.Index] == nil {
-						filepieces[cb.Piece.Index] = make([][]byte, maxBlocks)
-					}
-					filepieces[cb.Piece.Index][cb.Index] = block.Block
+					// if filepieces[cb.Piece.Index] == nil {
+					// 	filepieces[cb.Piece.Index] = make([][]byte, maxBlocks)
+					// }
+					// filepieces[cb.Piece.Index][cb.Index] = block.Block
+					//
+					// if cb.Piece.Done {
+					// 	buffer := []byte{}
+					// 	for _, b := range filepieces[cb.Piece.Index] {
+					// 		buffer = append(buffer, b...)
+					// 	}
+					//
+					// 	blocksHash := sha1.Sum(buffer)
+					// 	if blocksHash == hashes[block.Index] {
+					// 		pieceCounter--
+					// 		fmt.Printf("-------------------------------------------------- %s GOT: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
+					//
+					// 		_, err = conn.WriteHave(int(block.Index))
+					// 		if err != nil {
+					// 			return
+					// 		}
+					// 	} else {
+					// 		hashFails += 1
+					// 		fmt.Printf("-------------------------------------------------- %s GOT FAILED: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
+					// 		pp.Add(cb.Piece.Index)
+					// 	}
+					// }
+					//
+					// if hashFails >= MaxHashFails {
+					// 	for _, block := range picked {
+					// 		pp.Return(block)
+					// 	}
+					// 	fmt.Println("Excedded Maximum hash fails: 5")
+					// 	return
+					// }
 
-					if cb.Piece.Done {
-						buffer := []byte{}
-						for _, b := range filepieces[cb.Piece.Index] {
-							buffer = append(buffer, b...)
-						}
-
-						blocksHash := sha1.Sum(buffer)
-						if blocksHash == hashes[block.Index] {
-							pieceCounter--
-							fmt.Printf("-------------------------------------------------- %s GOT: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
-
-							_, err = conn.WriteHave(int(block.Index))
-							if err != nil {
-								return
-							}
-						} else {
-							hashFails += 1
-							fmt.Printf("-------------------------------------------------- %s GOT FAILED: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
-							pp.Add(cb.Piece.Index)
-						}
-					}
-
-					if hashFails >= MaxHashFails {
-						for _, block := range picked {
-							pp.Return(block)
-						}
-						fmt.Println("Excedded Maximum hash fails: 5")
-						return
-					}
-
-					for i := reqBacklog; i < MaxPipelinedRequests && interesting; i++ {
+					for len(reqQueue) < MaxPipelinedRequests && interesting {
 						// Send request
-						req := picked[0]
-						_, err := conn.WriteRequest(req.Piece.Index, req.Offset, req.Length)
-						if err != nil {
-							fmt.Println(err)
-							return
-						}
-						reqBacklog++
+						cp, cb, err := pp.Pick(bf)
 
-						// Choose new piece
-						cb, err := pp.Pick(bf)
-						picked = append([]*picker.Block{cb}, picked...)
 						if err != nil {
 							_, err := conn.WriteNotInterested()
 							if err != nil {
@@ -183,31 +161,54 @@ func main() {
 								return
 							}
 							interesting = false
+							break
 						}
+
+						length := int(math.Min(float64(gobt.DefaultBlockSize), float64(metainfo.Info.PieceLength)-float64(cb*gobt.DefaultBlockSize)))
+						_, err = conn.WriteRequest(cp, cb*gobt.DefaultBlockSize, length)
+						if err != nil {
+							fmt.Println(err)
+							return
+						}
+
+						reqQueue = append(reqQueue, []int{cp, cb})
 					}
 
 				case message.IDUnchoke:
-					for i := reqBacklog; i < MaxPipelinedRequests && interesting; i++ {
-						// Send request
-						req := picked[0]
-						_, err := conn.WriteRequest(req.Piece.Index, req.Offset, req.Length)
+					unresolved := reqQueue
+					reqQueue = [][]int{}
+
+					for len(reqQueue) < MaxPipelinedRequests && interesting {
+						// Pick block to request
+						var cp, cb int
+
+						if len(unresolved) == 0 {
+							cp, cb, err = pp.Pick(bf)
+
+							if err != nil {
+								_, err := conn.WriteNotInterested()
+								if err != nil {
+									fmt.Println(err)
+									return
+								}
+								interesting = false
+								break
+							}
+						} else {
+							cp = unresolved[0][0]
+							cb = unresolved[0][1]
+							unresolved = unresolved[1:]
+						}
+
+						length := int(math.Min(float64(gobt.DefaultBlockSize), float64(metainfo.Info.Length)-float64(cb*gobt.DefaultBlockSize)))
+						_, err = conn.WriteRequest(cp, cb*gobt.DefaultBlockSize, length)
 						if err != nil {
 							fmt.Println(err)
 							return
 						}
-						reqBacklog++
 
-						// Choose new piece
-						cb, err := pp.Pick(bf)
-						picked = append([]*picker.Block{cb}, picked...)
-						if err != nil {
-							_, err := conn.WriteNotInterested()
-							if err != nil {
-								fmt.Println(err)
-								return
-							}
-							interesting = false
-						}
+						reqQueue = append(reqQueue, []int{cp, cb})
+
 					}
 				case message.IDHave:
 					have := int(msg.Payload.Have())
@@ -218,18 +219,21 @@ func main() {
 						return
 					}
 				case message.IDBitfield:
+					// Define peer bitfield
 					err := bf.Replace(msg.Payload.Bitfield())
 					if err != nil {
 						fmt.Printf("Bitfield: %v\n", err)
 						return
 					}
 
+					// Calculate interesting pieces that peer has
 					diff, err := bf.Difference(clientBf)
 					if err != nil {
 						fmt.Printf("Bitfield: %v\n", err)
 						return
 					}
 
+					// Send interest status if it's not empty
 					if !diff.Empty() {
 						_, err := conn.WriteInterested()
 						if err != nil {
