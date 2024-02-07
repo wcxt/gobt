@@ -14,8 +14,8 @@ import (
 
 const (
 	MaxPipelinedRequests = 5
-	// MaxHashFails         = 5
-	MaxPeerTimeout = 2*time.Minute + 10*time.Second
+	MaxHashFails         = 15
+	MaxPeerTimeout       = 2*time.Minute + 10*time.Second
 )
 
 func main() {
@@ -77,7 +77,7 @@ func main() {
 
 			bf := bitfield.New(len(hashes))
 			reqQueue := [][]int{}
-			// hashFails := 0
+			hashFails := 0
 
 			timer := time.NewTimer(MaxPeerTimeout)
 			defer timer.Stop()
@@ -142,11 +142,12 @@ func main() {
 							// 		}
 						} else {
 							fmt.Printf("-------------------------------------------------- %s GOT FAILED: %d; \n", peer.Addr(), block.Index)
-							// hashFails += 1
-							// if hashFails >= MaxHashFails {
-							// 	fmt.Println("Excedded Maximum hash fails: 5")
-							// 	return
-							// }
+							pp.Clear(int(block.Index))
+							hashFails += 1
+							if hashFails >= MaxHashFails {
+								fmt.Println("Excedded Maximum hash fails: 5")
+								return
+							}
 						}
 					}
 

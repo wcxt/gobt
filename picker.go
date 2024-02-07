@@ -56,6 +56,17 @@ func (p *Picker) Pick(have bitfield.Bitfield) (int, int, error) {
 	return pIndex, bIndex, nil
 }
 
+// Clear clears piece state and readds it to the picker
+// NOTE: This method is unoptimized as it may cause loop where
+//
+//	the same peer/peers is constantly corrupting piece
+func (p *Picker) Clear(pIndex int) {
+	p.states[pIndex] = p.createState(pIndex)
+
+	p.ordered = append(p.ordered[:2], p.ordered[1:]...)
+	p.ordered[1] = pIndex
+}
+
 // pickPiece returns and removes piece that is available in peer bitfield from picker ordered pieces.
 func (p *Picker) pickPiece(have bitfield.Bitfield) (int, error) {
 	for _, val := range p.ordered {
@@ -97,9 +108,13 @@ func (p *Picker) getState(pIndex int) *Piece {
 	state, exists := p.states[pIndex]
 
 	if !exists {
-		state = &Piece{counter: 0, max: BlockCount(p.tSize, p.pMaxSize, pIndex)}
+		state = p.createState(pIndex)
 		p.states[pIndex] = state
 	}
 
 	return state
+}
+
+func (p *Picker) createState(pIndex int) *Piece {
+	return &Piece{counter: 0, max: BlockCount(p.tSize, p.pMaxSize, pIndex)}
 }
