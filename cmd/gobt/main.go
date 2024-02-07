@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha1"
 	"fmt"
 	"math"
 	"os"
@@ -13,8 +14,8 @@ import (
 
 const (
 	MaxPipelinedRequests = 5
-	MaxHashFails         = 5
-	MaxPeerTimeout       = 2*time.Minute + 10*time.Second
+	// MaxHashFails         = 5
+	MaxPeerTimeout = 2*time.Minute + 10*time.Second
 )
 
 func main() {
@@ -53,9 +54,7 @@ func main() {
 	}
 
 	pp := gobt.NewPicker(metainfo.Info.Length, metainfo.Info.PieceLength)
-	// pieceCounter := len(hashes)
-	// maxBlocks := metainfo.Info.PieceLength / 16000
-	// filepieces := make([][][]byte, len(hashes))
+	downloaded := make([][][]byte, len(hashes))
 	clientBf := bitfield.New(len(hashes))
 
 	for _, peer := range peers {
@@ -110,43 +109,46 @@ func main() {
 				case message.IDPiece:
 					reqQueue = reqQueue[1:]
 
-					// pp.Done(cb)
+					// Store piece
+					block := msg.Payload.Block()
+					bCount := gobt.BlockCount(metainfo.Info.Length, metainfo.Info.PieceLength, int(block.Index))
 
-					// Add piece content to buffer
-					// if filepieces[cb.Piece.Index] == nil {
-					// 	filepieces[cb.Piece.Index] = make([][]byte, maxBlocks)
-					// }
-					// filepieces[cb.Piece.Index][cb.Index] = block.Block
-					//
-					// if cb.Piece.Done {
-					// 	buffer := []byte{}
-					// 	for _, b := range filepieces[cb.Piece.Index] {
-					// 		buffer = append(buffer, b...)
-					// 	}
-					//
-					// 	blocksHash := sha1.Sum(buffer)
-					// 	if blocksHash == hashes[block.Index] {
-					// 		pieceCounter--
-					// 		fmt.Printf("-------------------------------------------------- %s GOT: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
-					//
-					// 		_, err = conn.WriteHave(int(block.Index))
-					// 		if err != nil {
-					// 			return
-					// 		}
-					// 	} else {
-					// 		hashFails += 1
-					// 		fmt.Printf("-------------------------------------------------- %s GOT FAILED: %d; PIECES LEFT: %d\n", peer.Addr(), block.Index, pieceCounter)
-					// 		pp.Add(cb.Piece.Index)
-					// 	}
-					// }
-					//
-					// if hashFails >= MaxHashFails {
-					// 	for _, block := range picked {
-					// 		pp.Return(block)
-					// 	}
-					// 	fmt.Println("Excedded Maximum hash fails: 5")
-					// 	return
-					// }
+					if downloaded[block.Index] == nil {
+						downloaded[block.Index] = make([][]byte, bCount)
+					}
+
+					downloaded[block.Index][block.Offset/gobt.DefaultBlockSize] = block.Block
+
+					// Check if piece is full
+					fullPiece := true
+					for _, val := range downloaded[block.Index] {
+						if val == nil {
+							fullPiece = false
+						}
+					}
+
+					if fullPiece {
+						buf := []byte{}
+						for _, b := range downloaded[block.Index] {
+							buf = append(buf, b...)
+						}
+
+						pHash := sha1.Sum(buf)
+						if pHash == hashes[block.Index] {
+							fmt.Printf("-------------------------------------------------- %s GOT: %d; \n", peer.Addr(), block.Index)
+							// 		_, err = conn.WriteHave(int(block.Index))
+							// 		if err != nil {
+							// 			return
+							// 		}
+						} else {
+							fmt.Printf("-------------------------------------------------- %s GOT FAILED: %d; \n", peer.Addr(), block.Index)
+							// hashFails += 1
+							// if hashFails >= MaxHashFails {
+							// 	fmt.Println("Excedded Maximum hash fails: 5")
+							// 	return
+							// }
+						}
+					}
 
 					for len(reqQueue) < MaxPipelinedRequests && interesting {
 						// Send request

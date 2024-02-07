@@ -9,11 +9,11 @@ import (
 
 const DefaultBlockSize = 16000
 
-func pieceCount(tSize, pMaxSize int) int {
+func PieceCount(tSize, pMaxSize int) int {
 	return int(math.Ceil((float64(tSize) / float64(pMaxSize))))
 }
 
-func blockCount(tSize, pMaxSize, pIndex int) int {
+func BlockCount(tSize, pMaxSize, pIndex int) int {
 	pSize := math.Min(float64(pMaxSize), float64(tSize)-float64(pMaxSize)*float64(pIndex))
 	return int(math.Ceil((float64(pSize) / float64(DefaultBlockSize))))
 }
@@ -33,7 +33,7 @@ type Picker struct {
 
 // NewPicker creates picker with pieces to pick from.
 func NewPicker(tSize, pMaxSize int) *Picker {
-	count := pieceCount(tSize, pMaxSize)
+	count := PieceCount(tSize, pMaxSize)
 	ordered := make([]int, count)
 
 	for i := 0; i < count; i++ {
@@ -97,7 +97,7 @@ func (p *Picker) getState(pIndex int) *Piece {
 	state, exists := p.states[pIndex]
 
 	if !exists {
-		state = &Piece{counter: 0, max: blockCount(p.tSize, p.pMaxSize, pIndex)}
+		state = &Piece{counter: 0, max: BlockCount(p.tSize, p.pMaxSize, pIndex)}
 		p.states[pIndex] = state
 	}
 
