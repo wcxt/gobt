@@ -110,8 +110,6 @@ func main() {
 				case message.IDPiece:
 					reqQueue = reqQueue[1:]
 
-					// reqBacklog--
-
 					// pp.Done(cb)
 
 					// Add piece content to buffer
@@ -217,6 +215,15 @@ func main() {
 					if err != nil {
 						fmt.Printf("Bitfield: %v\n", err)
 						return
+					}
+
+					if has, _ := clientBf.Get(have); !interesting && has {
+						_, err := conn.WriteInterested()
+						if err != nil {
+							fmt.Println(err)
+							return
+						}
+						interesting = true
 					}
 				case message.IDBitfield:
 					// Define peer bitfield
