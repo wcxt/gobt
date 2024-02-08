@@ -229,7 +229,7 @@ func main() {
 						return
 					}
 
-					if has, _ := clientBf.Get(have); !interesting && has {
+					if has, _ := clientBf.Get(have); !interesting && !has {
 						_, err := conn.WriteInterested()
 						if err != nil {
 							fmt.Println(err)
