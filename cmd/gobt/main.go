@@ -56,6 +56,7 @@ func main() {
 	pp := gobt.NewPicker(metainfo.Info.Length, metainfo.Info.PieceLength)
 	downloaded := make([][][]byte, len(hashes))
 	clientBf := bitfield.New(len(hashes))
+	pCount := 0
 
 	for _, peer := range peers {
 		go func(peer gobt.AnnouncePeer) {
@@ -74,6 +75,7 @@ func main() {
 
 			// Message loop
 			interesting := false
+			choked := true
 
 			bf := bitfield.New(len(hashes))
 			reqQueue := [][]int{}
@@ -105,12 +107,13 @@ func main() {
 
 				switch msg.ID {
 				case message.IDChoke:
-					break
+					choked = true
 				case message.IDPiece:
+					block := msg.Payload.Block()
+					fmt.Printf("REMOVING REQUEST: %v; GOT: [%d %d] \n", reqQueue[0], block.Index, block.Offset/gobt.DefaultBlockSize)
 					reqQueue = reqQueue[1:]
 
 					// Store piece
-					block := msg.Payload.Block()
 					bCount := gobt.BlockCount(metainfo.Info.Length, metainfo.Info.PieceLength, int(block.Index))
 
 					if downloaded[block.Index] == nil {
@@ -135,7 +138,8 @@ func main() {
 
 						pHash := sha1.Sum(buf)
 						if pHash == hashes[block.Index] {
-							fmt.Printf("-------------------------------------------------- %s GOT: %d; \n", peer.Addr(), block.Index)
+							pCount++
+							fmt.Printf("-------------------------------------------------- %s GOT: %d; DONE: %d \n", peer.Addr(), block.Index, pCount)
 							// 		_, err = conn.WriteHave(int(block.Index))
 							// 		if err != nil {
 							// 			return
@@ -176,8 +180,12 @@ func main() {
 					}
 
 				case message.IDUnchoke:
-					unresolved := reqQueue
-					reqQueue = [][]int{}
+
+					unresolved := [][]int{}
+					if choked {
+						unresolved = reqQueue
+						reqQueue = [][]int{}
+					}
 
 					for len(reqQueue) < MaxPipelinedRequests && interesting {
 						// Pick block to request
@@ -209,8 +217,9 @@ func main() {
 						}
 
 						reqQueue = append(reqQueue, []int{cp, cb})
-
 					}
+
+					choked = false
 				case message.IDHave:
 					have := int(msg.Payload.Have())
 					err := bf.Set(have)
