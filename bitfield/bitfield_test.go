@@ -12,22 +12,26 @@ func TestBitfieldReplace(t *testing.T) {
 		error bool
 	}{
 		"shorter length": {
-			input: []byte{10, 20},
+			input: []byte{10, 20, 0},
 			error: true,
 		},
 		"longer length": {
-			input: []byte{10, 20, 30, 40, 50, 60},
+			input: []byte{10, 20, 30, 40, 50, 0},
 			error: true,
 		},
 		"equal length": {
-			input: []byte{10, 20, 30, 40},
+			input: []byte{10, 20, 30, 40, 0},
 			error: false,
+		},
+		"spare bits set": {
+			input: []byte{10, 20, 30, 40, 3},
+			error: true,
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			bf := bitfield.New(32)
+			bf := bitfield.New(36)
 
 			err := bf.Replace(test.input)
 

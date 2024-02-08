@@ -38,6 +38,11 @@ func (bf *bitfield) Replace(data []byte) error {
 		return fmt.Errorf("invalid replace data size: %d", len(data))
 	}
 
+	spare := int(data[len(bf.field)-1] << (bf.size % 8))
+	if spare != 0 {
+		return fmt.Errorf("spare bits set")
+	}
+
 	bf.field = data
 	return nil
 }
