@@ -7,7 +7,14 @@ import (
 	"github.com/edwces/gobt/bitfield"
 )
 
-const DefaultBlockSize = 16000
+type PieceStatus int
+
+const (
+	PiecePending PieceStatus = iota
+	PieceIncomplete
+
+	DefaultBlockSize = 16000
+)
 
 func PieceCount(tSize, pMaxSize int) int {
 	return int(math.Ceil((float64(tSize) / float64(pMaxSize))))
@@ -19,8 +26,8 @@ func BlockCount(tSize, pMaxSize, pIndex int) int {
 }
 
 type Piece struct {
-	counter int
-	max     int
+	pending []int
+	status  PieceStatus
 }
 
 type Picker struct {
@@ -67,6 +74,16 @@ func (p *Picker) Clear(pIndex int) {
 	p.ordered[1] = pIndex
 }
 
+// Abort adds block to requests and optionally puts incomplete piece onto the top of picker
+func (p *Picker) Abort(pIndex, bIndex int) {
+	p.states[pIndex].pending = append(p.states[pIndex].pending, bIndex)
+
+	if p.states[pIndex].status == PieceIncomplete {
+		p.states[pIndex].status = PiecePending
+		p.ordered = append([]int{pIndex}, p.ordered...)
+	}
+}
+
 // pickPiece returns and removes piece that is available in peer bitfield from picker ordered pieces.
 func (p *Picker) pickPiece(have bitfield.Bitfield) (int, error) {
 	for _, val := range p.ordered {
@@ -92,14 +109,15 @@ func (p *Picker) removePiece(pIndex int) bool {
 // pickBlock returns block index and removes piece from picker if all blocks have been requested
 func (p *Picker) pickBlock(pIndex int) int {
 	state := p.getState(pIndex)
-	bIndex := state.counter
+	bIndex := state.pending[0]
+	state.pending = state.pending[1:]
 
-	if state.counter+1 == state.max {
+	if len(state.pending) == 0 {
 		p.removePiece(pIndex)
+		state.status = PieceIncomplete
 		return bIndex
 	}
 
-	state.counter++
 	return bIndex
 }
 
@@ -116,5 +134,11 @@ func (p *Picker) getState(pIndex int) *Piece {
 }
 
 func (p *Picker) createState(pIndex int) *Piece {
-	return &Piece{counter: 0, max: BlockCount(p.tSize, p.pMaxSize, pIndex)}
+	bCount := BlockCount(p.tSize, p.pMaxSize, pIndex)
+	pending := []int{}
+	for i := 0; i < bCount; i++ {
+		pending = append(pending, i)
+	}
+
+	return &Piece{pending: pending, status: PiecePending}
 }

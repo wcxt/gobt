@@ -83,6 +83,11 @@ func main() {
 
 			timer := time.NewTimer(MaxPeerTimeout)
 			defer timer.Stop()
+			defer func() {
+				for _, req := range reqQueue {
+					pp.Abort(req[0], req[1])
+				}
+			}()
 
 			go func() {
 				<-timer.C
