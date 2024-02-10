@@ -209,7 +209,7 @@ func main() {
 							unresolved = unresolved[1:]
 						}
 
-						length := int(math.Min(float64(gobt.DefaultBlockSize), float64(metainfo.Info.Length)-float64(cb*gobt.DefaultBlockSize)))
+						length := int(math.Min(float64(gobt.DefaultBlockSize), float64(metainfo.Info.PieceLength)-float64(cb*gobt.DefaultBlockSize)))
 						_, err = conn.WriteRequest(cp, cb*gobt.DefaultBlockSize, length)
 						if err != nil {
 							fmt.Println(err)
