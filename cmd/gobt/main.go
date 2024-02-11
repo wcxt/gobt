@@ -115,7 +115,12 @@ func main() {
 					choked = true
 				case message.IDPiece:
 					block := msg.Payload.Block()
-					fmt.Printf("REMOVING REQUEST: %v; GOT: [%d %d] \n", reqQueue[0], block.Index, block.Offset/gobt.DefaultBlockSize)
+
+					if int(block.Index) != reqQueue[0][0] || int(block.Offset) != (reqQueue[0][1]*gobt.DefaultBlockSize) || len(block.Block) != reqQueue[0][2] {
+						fmt.Println("Invalid block received")
+						return
+					}
+
 					reqQueue = reqQueue[1:]
 
 					// Store piece
@@ -181,7 +186,7 @@ func main() {
 							return
 						}
 
-						reqQueue = append(reqQueue, []int{cp, cb})
+						reqQueue = append(reqQueue, []int{cp, cb, length})
 					}
 
 				case message.IDUnchoke:
@@ -221,7 +226,7 @@ func main() {
 							return
 						}
 
-						reqQueue = append(reqQueue, []int{cp, cb})
+						reqQueue = append(reqQueue, []int{cp, cb, length})
 					}
 
 					choked = false
