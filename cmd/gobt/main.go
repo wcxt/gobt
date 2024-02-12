@@ -69,6 +69,7 @@ func main() {
 			conn, err := gobt.DialTimeout(peer.Addr())
 			if err != nil {
 				fmt.Printf("connection error: %v\n", err)
+				wg.Done()
 				return
 			}
 			defer conn.Close()
@@ -76,6 +77,7 @@ func main() {
 			err = conn.Handshake(hash, clientID)
 			if err != nil {
 				fmt.Printf("handshake error: %v\n", err)
+				wg.Done()
 				return
 			}
 
