@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/edwces/gobt"
@@ -57,11 +58,14 @@ func main() {
 	downloaded := make([][][]byte, len(hashes))
 	clientBf := bitfield.New(len(hashes))
 	peerConns := map[string]*gobt.Conn{}
-
 	pCount := 0
 
+	var wg sync.WaitGroup
+
 	for _, peer := range peers {
+		wg.Add(1)
 		go func(peer gobt.AnnouncePeer) {
+
 			conn, err := gobt.DialTimeout(peer.Addr())
 			if err != nil {
 				fmt.Printf("connection error: %v\n", err)
@@ -91,6 +95,7 @@ func main() {
 				for _, req := range reqQueue {
 					pp.Abort(req[0], req[1])
 				}
+				wg.Done()
 			}()
 
 			go func() {
@@ -160,10 +165,6 @@ func main() {
 									pconn.Close()
 								}
 							}
-							// 		_, err = conn.WriteHave(int(block.Index))
-							// 		if err != nil {
-							// 			return
-							// 		}
 						} else {
 							fmt.Printf("-------------------------------------------------- %s GOT FAILED: %d; \n", peer.Addr(), block.Index)
 							pp.Clear(int(block.Index))
@@ -287,5 +288,5 @@ func main() {
 		}(peer)
 	}
 
-	select {}
+	wg.Wait()
 }
