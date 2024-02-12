@@ -219,3 +219,40 @@ func TestBitfieldEmpty(t *testing.T) {
 		})
 	}
 }
+
+func TestBitfieldFull(t *testing.T) {
+	tests := map[string]struct {
+		data  []byte
+		value bool
+	}{
+		"true": {
+			data:  []byte{255, 255, 255, 255, 240},
+			value: true,
+		},
+		"false": {
+			data:  []byte{234, 255, 255, 255, 240},
+			value: false,
+		},
+		"false spare": {
+			data:  []byte{255, 255, 255, 255, 224},
+			value: false,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			bf := bitfield.New(36)
+			err := bf.Replace(test.data)
+
+			if err != nil {
+				t.Error(err)
+			}
+
+			got := bf.Full()
+
+			if got != test.value {
+				t.Fatalf("got %t, want %t", got, test.value)
+			}
+		})
+	}
+}

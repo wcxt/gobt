@@ -17,6 +17,7 @@ type Bitfield interface {
 	Size() int
 	Get(int) (bool, error)
 	Empty() bool
+	Full() bool
 	Difference(Bitfield) (Bitfield, error)
 }
 
@@ -75,6 +76,22 @@ func (bf *bitfield) Empty() bool {
 		if byte > 0 {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (bf *bitfield) Full() bool {
+	for i := 0; i < len(bf.field)-1; i++ {
+		if bf.field[i] != 255 {
+			return false
+		}
+	}
+
+	offset := bf.size % 8
+	lastFull := 255 << offset
+	if bf.field[len(bf.field)-1] != byte(lastFull) {
+		return false
 	}
 
 	return true

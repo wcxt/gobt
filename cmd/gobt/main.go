@@ -160,15 +160,15 @@ func main() {
 						pHash := sha1.Sum(buf)
 						if pHash == hashes[block.Index] {
 							pCount++
+							clientBf.Set(int(block.Index))
 							fmt.Printf("-------------------------------------------------- %s GOT: %d; DONE: %d \n", peer.Addr(), block.Index, pCount)
 
-							if pCount == len(hashes) {
+							if clientBf.Full() {
 								for _, pconn := range peerConns {
 									pconn.Close()
 								}
 							}
 
-							clientBf.Set(int(block.Index))
 						} else {
 							fmt.Printf("-------------------------------------------------- %s GOT FAILED: %d; \n", peer.Addr(), block.Index)
 							pp.Clear(int(block.Index))
