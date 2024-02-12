@@ -56,6 +56,8 @@ func main() {
 	pp := gobt.NewPicker(metainfo.Info.Length, metainfo.Info.PieceLength)
 	downloaded := make([][][]byte, len(hashes))
 	clientBf := bitfield.New(len(hashes))
+	peerConns := map[string]*gobt.Conn{}
+
 	pCount := 0
 
 	for _, peer := range peers {
@@ -72,6 +74,8 @@ func main() {
 				fmt.Printf("handshake error: %v\n", err)
 				return
 			}
+
+			peerConns[conn.String()] = conn
 
 			// Message loop
 			interesting := false
@@ -150,6 +154,12 @@ func main() {
 						if pHash == hashes[block.Index] {
 							pCount++
 							fmt.Printf("-------------------------------------------------- %s GOT: %d; DONE: %d \n", peer.Addr(), block.Index, pCount)
+
+							if pCount == len(hashes) {
+								for _, pconn := range peerConns {
+									pconn.Close()
+								}
+							}
 							// 		_, err = conn.WriteHave(int(block.Index))
 							// 		if err != nil {
 							// 			return

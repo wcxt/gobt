@@ -12,89 +12,93 @@ import (
 const DefaultConnTimeout = 3 * time.Second
 
 type Conn struct {
-    conn net.Conn
+	conn net.Conn
 }
 
 func DialTimeout(address string) (*Conn, error) {
-    conn, err := net.DialTimeout("tcp", address, DefaultConnTimeout)
-    if err != nil {
-        return nil, err
-    }
+	conn, err := net.DialTimeout("tcp", address, DefaultConnTimeout)
+	if err != nil {
+		return nil, err
+	}
 
-    return &Conn{conn: conn}, nil
+	return &Conn{conn: conn}, nil
 }
 
 func (c *Conn) Handshake(hash [20]byte, clientID [20]byte) error {
-    hs := handshake.New(hash, clientID)
-    handshake.Write(c.conn, hs)
+	hs := handshake.New(hash, clientID)
+	handshake.Write(c.conn, hs)
 
-    hs, err := handshake.Read(c.conn)
-    if err != nil {
-        return err
-    }
+	hs, err := handshake.Read(c.conn)
+	if err != nil {
+		return err
+	}
 
-    if hs.InfoHash != hash {
-        return fmt.Errorf("InfoHash unexpected value: %s", hs.InfoHash) 
-    }
-    
-    return nil
+	if hs.InfoHash != hash {
+		return fmt.Errorf("InfoHash unexpected value: %s", hs.InfoHash)
+	}
+
+	return nil
 
 }
 
 func (c *Conn) ReadMsg() (*message.Message, error) {
-    msg, err := message.Read(c.conn)
-    if err != nil {
-        return nil, err
-    }
+	msg, err := message.Read(c.conn)
+	if err != nil {
+		return nil, err
+	}
 
-    fmt.Printf("%s READ: %s\n", c.conn.RemoteAddr().String(), msg.String())
+	fmt.Printf("%s READ: %s\n", c.conn.RemoteAddr().String(), msg.String())
 
-    return msg, nil
+	return msg, nil
 }
 
 func (c *Conn) WriteMsg(id message.ID, payload message.Payload) (int, error) {
-    nmsg := &message.Message{ID: id, Payload: payload}
-    wb, err := message.Write(c.conn, nmsg)
-    if err != nil {
-        return wb, err
-    }
-    
-    if nmsg.ID != message.IDRequest {
-        fmt.Printf("%s WRITE: %s\n", c.conn.RemoteAddr().String(), nmsg.String())
-    }
+	nmsg := &message.Message{ID: id, Payload: payload}
+	wb, err := message.Write(c.conn, nmsg)
+	if err != nil {
+		return wb, err
+	}
 
-    return wb, nil
+	if nmsg.ID != message.IDRequest {
+		fmt.Printf("%s WRITE: %s\n", c.conn.RemoteAddr().String(), nmsg.String())
+	}
+
+	return wb, nil
 }
 
 func (c *Conn) KeepAlive() (int, error) {
-    nmsg := &message.Message{KeepAlive: true}
-    return message.Write(c.conn, nmsg)
+	nmsg := &message.Message{KeepAlive: true}
+	return message.Write(c.conn, nmsg)
 }
 
 func (c *Conn) WriteUnchoke() (int, error) {
-    return c.WriteMsg(message.IDUnchoke, nil)
+	return c.WriteMsg(message.IDUnchoke, nil)
 }
 
 func (c *Conn) WriteInterested() (int, error) {
-    return c.WriteMsg(message.IDInterested, nil)
+	return c.WriteMsg(message.IDInterested, nil)
 }
 
 func (c *Conn) WriteNotInterested() (int, error) {
-    return c.WriteMsg(message.IDNotInterested, nil)
+	return c.WriteMsg(message.IDNotInterested, nil)
 }
 
 func (c *Conn) WriteRequest(index, offset, length int) (int, error) {
-    req := message.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
-    fmt.Printf("%s WRITE REQUEST: %d %d %d\n", c.conn.RemoteAddr().String(), index, offset, length)
-    payload := message.NewRequestPayload(req)
-    return c.WriteMsg(message.IDRequest, payload)
+	req := message.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
+	fmt.Printf("%s WRITE REQUEST: %d %d %d\n", c.conn.RemoteAddr().String(), index, offset, length)
+	payload := message.NewRequestPayload(req)
+	return c.WriteMsg(message.IDRequest, payload)
 }
 
 func (c *Conn) WriteHave(index int) (int, error) {
-    payload := message.NewHavePayload(uint32(index))
-    return c.WriteMsg(message.IDHave, payload)
+	payload := message.NewHavePayload(uint32(index))
+	return c.WriteMsg(message.IDHave, payload)
+}
+
+func (c *Conn) String() string {
+	return c.conn.RemoteAddr().String()
 }
 
 func (c *Conn) Close() error {
-    return c.conn.Close()
+	return c.conn.Close()
 }
