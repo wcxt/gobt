@@ -165,6 +165,8 @@ func main() {
 									pconn.Close()
 								}
 							}
+
+							clientBf.Set(int(block.Index))
 						} else {
 							fmt.Printf("-------------------------------------------------- %s GOT FAILED: %d; \n", peer.Addr(), block.Index)
 							pp.Clear(int(block.Index))
