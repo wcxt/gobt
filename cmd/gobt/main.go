@@ -135,12 +135,10 @@ func main() {
 					reqQueue = reqQueue[1:]
 
 					// Store piece
-					bCount := gobt.BlockCount(metainfo.Info.Length, metainfo.Info.PieceLength, int(block.Index))
-
 					if downloaded[block.Index] == nil {
+						bCount := gobt.BlockCount(metainfo.Info.Length, metainfo.Info.PieceLength, int(block.Index))
 						downloaded[block.Index] = make([][]byte, bCount)
 					}
-
 					downloaded[block.Index][block.Offset/gobt.DefaultBlockSize] = block.Block
 
 					// Check if piece is full
@@ -195,13 +193,12 @@ func main() {
 						}
 
 						length := int(math.Min(float64(gobt.DefaultBlockSize), float64(metainfo.Info.PieceLength)-float64(cb*gobt.DefaultBlockSize)))
+						reqQueue = append(reqQueue, []int{cp, cb, length})
 						_, err = conn.WriteRequest(cp, cb*gobt.DefaultBlockSize, length)
 						if err != nil {
 							fmt.Println(err)
 							return
 						}
-
-						reqQueue = append(reqQueue, []int{cp, cb, length})
 					}
 
 				case message.IDUnchoke:
@@ -235,13 +232,12 @@ func main() {
 						}
 
 						length := int(math.Min(float64(gobt.DefaultBlockSize), float64(metainfo.Info.PieceLength)-float64(cb*gobt.DefaultBlockSize)))
+						reqQueue = append(reqQueue, []int{cp, cb, length})
 						_, err = conn.WriteRequest(cp, cb*gobt.DefaultBlockSize, length)
 						if err != nil {
 							fmt.Println(err)
 							return
 						}
-
-						reqQueue = append(reqQueue, []int{cp, cb, length})
 					}
 
 					choked = false
