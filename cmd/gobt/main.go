@@ -60,6 +60,19 @@ func main() {
 	peerConns := map[string]*gobt.Conn{}
 	pCount := 0
 
+	file, err := os.Create(metainfo.Info.Name)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	defer func() {
+		file.Close()
+		if !clientBf.Full() {
+			os.Remove(metainfo.Info.Name)
+		}
+	}()
+
 	var wg sync.WaitGroup
 
 	for _, peer := range peers {
@@ -160,6 +173,7 @@ func main() {
 							pCount++
 							clientBf.Set(int(block.Index))
 							fmt.Printf("-------------------------------------------------- %s GOT: %d; DONE: %d \n", peer.Addr(), block.Index, pCount)
+							file.WriteAt(buf, int64(int(block.Index)*metainfo.Info.PieceLength))
 
 							if clientBf.Full() {
 								for _, pconn := range peerConns {
