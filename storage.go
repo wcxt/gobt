@@ -48,8 +48,5 @@ func (s *Storage) Verify(pIndex int, hash [20]byte) bool {
 	buf := s.GetPieceData(pIndex)
 	pHash := sha1.Sum(buf)
 
-	fmt.Printf("PHASH: %v \n", pHash)
-	fmt.Printf("HASH: %v \n", hash)
-
 	return pHash == hash
 }
