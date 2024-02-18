@@ -12,6 +12,7 @@ type PieceStatus int
 const (
 	PiecePending PieceStatus = iota
 	PieceIncomplete
+	PieceDone
 
 	DefaultBlockSize = 16000
 )
@@ -26,7 +27,10 @@ func BlockCount(tSize, pMaxSize, pIndex int) int {
 }
 
 type Piece struct {
+	blocks int
+
 	pending []int
+	done    []int
 	status  PieceStatus
 }
 
@@ -61,6 +65,21 @@ func (p *Picker) Pick(have bitfield.Bitfield) (int, int, error) {
 	bIndex := p.pickBlock(pIndex)
 
 	return pIndex, bIndex, nil
+}
+
+func (p *Picker) MarkBlockDone(pIndex, bIndex int) {
+	state := p.getState(pIndex)
+	state.done = append(state.done, bIndex)
+
+	if len(state.done) == state.blocks {
+		state.status = PieceDone
+	}
+}
+
+func (p *Picker) IsPieceDone(pIndex int) bool {
+	state := p.getState(pIndex)
+
+	return state.status == PieceDone
 }
 
 // Clear clears piece state and readds it to the picker
@@ -136,9 +155,10 @@ func (p *Picker) getState(pIndex int) *Piece {
 func (p *Picker) createState(pIndex int) *Piece {
 	bCount := BlockCount(p.tSize, p.pMaxSize, pIndex)
 	pending := []int{}
+	done := []int{}
 	for i := 0; i < bCount; i++ {
 		pending = append(pending, i)
 	}
 
-	return &Piece{pending: pending, status: PiecePending}
+	return &Piece{blocks: bCount, pending: pending, done: done, status: PiecePending}
 }

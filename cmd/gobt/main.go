@@ -145,24 +145,16 @@ func main() {
 						return
 					}
 
-					reqQueue = reqQueue[1:]
-
 					// Store piece
 					if downloaded[block.Index] == nil {
 						bCount := gobt.BlockCount(metainfo.Info.Length, metainfo.Info.PieceLength, int(block.Index))
 						downloaded[block.Index] = make([][]byte, bCount)
 					}
 					downloaded[block.Index][block.Offset/gobt.DefaultBlockSize] = block.Block
+					pp.MarkBlockDone(reqQueue[0][0], reqQueue[0][1])
+					reqQueue = reqQueue[1:]
 
-					// Check if piece is full
-					fullPiece := true
-					for _, val := range downloaded[block.Index] {
-						if val == nil {
-							fullPiece = false
-						}
-					}
-
-					if fullPiece {
+					if pp.IsPieceDone(int(block.Index)) {
 						buf := []byte{}
 						for _, b := range downloaded[block.Index] {
 							buf = append(buf, b...)
