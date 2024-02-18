@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/sha1"
 	"fmt"
 	"math"
 	"os"
@@ -55,7 +54,7 @@ func main() {
 	}
 
 	pp := gobt.NewPicker(metainfo.Info.Length, metainfo.Info.PieceLength)
-	downloaded := make([][][]byte, len(hashes))
+	storage := gobt.NewStorage(metainfo.Info.Length, metainfo.Info.PieceLength)
 	clientBf := bitfield.New(len(hashes))
 	peerConns := map[string]*gobt.Conn{}
 	pCount := 0
@@ -146,26 +145,16 @@ func main() {
 					}
 
 					// Store piece
-					if downloaded[block.Index] == nil {
-						bCount := gobt.BlockCount(metainfo.Info.Length, metainfo.Info.PieceLength, int(block.Index))
-						downloaded[block.Index] = make([][]byte, bCount)
-					}
-					downloaded[block.Index][block.Offset/gobt.DefaultBlockSize] = block.Block
+					storage.SaveAt(int(block.Index), block.Block, int(block.Offset))
 					pp.MarkBlockDone(reqQueue[0][0], reqQueue[0][1])
 					reqQueue = reqQueue[1:]
 
 					if pp.IsPieceDone(int(block.Index)) {
-						buf := []byte{}
-						for _, b := range downloaded[block.Index] {
-							buf = append(buf, b...)
-						}
-
-						pHash := sha1.Sum(buf)
-						if pHash == hashes[block.Index] {
+						if storage.Verify(int(block.Index), hashes[block.Index]) {
 							pCount++
 							clientBf.Set(int(block.Index))
 							fmt.Printf("-------------------------------------------------- %s GOT: %d; DONE: %d \n", peer.Addr(), block.Index, pCount)
-							file.WriteAt(buf, int64(int(block.Index)*metainfo.Info.PieceLength))
+							file.WriteAt(storage.GetPieceData(int(block.Index)), int64(int(block.Index)*metainfo.Info.PieceLength))
 
 							if clientBf.Full() {
 								for _, pconn := range peerConns {
