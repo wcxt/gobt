@@ -3,6 +3,7 @@ package gobt
 import (
 	"errors"
 	"math"
+	"sync"
 
 	"github.com/edwces/gobt/bitfield"
 )
@@ -40,6 +41,8 @@ type Picker struct {
 
 	states  map[int]*Piece
 	ordered []int
+
+	sync.Mutex
 }
 
 // NewPicker creates picker with pieces to pick from.
@@ -56,6 +59,9 @@ func NewPicker(tSize, pMaxSize int) *Picker {
 
 // Pick gets a new block from pieces that are available in bitfield.
 func (p *Picker) Pick(have bitfield.Bitfield) (int, int, error) {
+	p.Lock()
+	defer p.Unlock()
+
 	pIndex, error := p.pickPiece(have)
 
 	if error != nil {
@@ -68,6 +74,9 @@ func (p *Picker) Pick(have bitfield.Bitfield) (int, int, error) {
 }
 
 func (p *Picker) MarkBlockDone(pIndex, bIndex int) {
+	p.Lock()
+	defer p.Unlock()
+
 	state := p.getState(pIndex)
 	state.done = append(state.done, bIndex)
 
@@ -77,6 +86,9 @@ func (p *Picker) MarkBlockDone(pIndex, bIndex int) {
 }
 
 func (p *Picker) IsPieceDone(pIndex int) bool {
+	p.Lock()
+	defer p.Unlock()
+
 	state := p.getState(pIndex)
 
 	return state.status == PieceDone
@@ -87,6 +99,9 @@ func (p *Picker) IsPieceDone(pIndex int) bool {
 //
 //	the same peer/peers is constantly corrupting piece
 func (p *Picker) MarkPiecePending(pIndex int) {
+	p.Lock()
+	defer p.Unlock()
+
 	p.states[pIndex] = p.createState(pIndex)
 
 	p.ordered = append(p.ordered[:2], p.ordered[1:]...)
@@ -95,6 +110,9 @@ func (p *Picker) MarkPiecePending(pIndex int) {
 
 // MarkBlockPending adds block to requests and optionally puts incomplete piece onto the top of picker
 func (p *Picker) MarkBlockPending(pIndex, bIndex int) {
+	p.Lock()
+	defer p.Unlock()
+
 	p.states[pIndex].pending = append(p.states[pIndex].pending, bIndex)
 
 	if p.states[pIndex].status == PieceIncomplete {
