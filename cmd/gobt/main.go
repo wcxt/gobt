@@ -57,7 +57,7 @@ func main() {
 	pp := gobt.NewPicker(metainfo.Info.Length, metainfo.Info.PieceLength)
 	storage := gobt.NewStorage(metainfo.Info.Length, metainfo.Info.PieceLength)
 	clientBf := bitfield.New(len(hashes))
-	peerConns := map[string]*gobt.Conn{}
+	peerConns := sync.Map{}
 	pCount := 0
 
 	file, err := os.Create(metainfo.Info.Name)
@@ -94,7 +94,7 @@ func main() {
 				return
 			}
 
-			peerConns[conn.String()] = conn
+			peerConns.Store(conn.String(), conn)
 
 			// Message loop
 			interesting := false
@@ -150,9 +150,10 @@ func main() {
 							file.WriteAt(storage.GetPieceData(int(block.Index)), int64(int(block.Index)*metainfo.Info.PieceLength))
 
 							if clientBf.Full() {
-								for _, pconn := range peerConns {
-									pconn.Close()
-								}
+								peerConns.Range(func(key, value any) bool {
+									value.(*gobt.Conn).Close()
+									return true
+								})
 							}
 
 						} else {
