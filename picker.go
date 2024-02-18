@@ -82,19 +82,19 @@ func (p *Picker) IsPieceDone(pIndex int) bool {
 	return state.status == PieceDone
 }
 
-// Clear clears piece state and readds it to the picker
+// MarkPiecePending clears piece state and readds it to the picker
 // NOTE: This method is unoptimized as it may cause loop where
 //
 //	the same peer/peers is constantly corrupting piece
-func (p *Picker) Clear(pIndex int) {
+func (p *Picker) MarkPiecePending(pIndex int) {
 	p.states[pIndex] = p.createState(pIndex)
 
 	p.ordered = append(p.ordered[:2], p.ordered[1:]...)
 	p.ordered[1] = pIndex
 }
 
-// Abort adds block to requests and optionally puts incomplete piece onto the top of picker
-func (p *Picker) Abort(pIndex, bIndex int) {
+// MarkBlockPending adds block to requests and optionally puts incomplete piece onto the top of picker
+func (p *Picker) MarkBlockPending(pIndex, bIndex int) {
 	p.states[pIndex].pending = append(p.states[pIndex].pending, bIndex)
 
 	if p.states[pIndex].status == PieceIncomplete {

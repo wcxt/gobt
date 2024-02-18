@@ -107,7 +107,7 @@ func main() {
 			defer timer.Stop()
 			defer func() {
 				for _, req := range reqQueue {
-					pp.Abort(req[0], req[1])
+					pp.MarkBlockPending(req[0], req[1])
 				}
 				wg.Done()
 			}()
@@ -164,7 +164,7 @@ func main() {
 
 						} else {
 							fmt.Printf("-------------------------------------------------- %s GOT FAILED: %d; \n", peer.Addr(), block.Index)
-							pp.Clear(int(block.Index))
+							pp.MarkPiecePending(int(block.Index))
 							hashFails += 1
 							if hashFails >= MaxHashFails {
 								fmt.Println("Excedded Maximum hash fails: 5")
