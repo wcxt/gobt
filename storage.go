@@ -2,7 +2,6 @@ package gobt
 
 import (
 	"crypto/sha1"
-	"fmt"
 	"math"
 )
 

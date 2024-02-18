@@ -13,6 +13,9 @@ const DefaultConnTimeout = 3 * time.Second
 
 type Conn struct {
 	conn net.Conn
+
+	writeKeepAlivePeriod time.Duration
+	writeKeepAliveTicker *time.Ticker
 }
 
 func DialTimeout(address string) (*Conn, error) {
@@ -24,7 +27,7 @@ func DialTimeout(address string) (*Conn, error) {
 	return &Conn{conn: conn}, nil
 }
 
-func (c *Conn) Handshake(hash [20]byte, clientID [20]byte) error {
+func (c *Conn) Handshake(hash, clientID [20]byte) error {
 	hs := handshake.New(hash, clientID)
 	handshake.Write(c.conn, hs)
 
@@ -40,8 +43,22 @@ func (c *Conn) Handshake(hash [20]byte, clientID [20]byte) error {
 	return nil
 }
 
-func (c *Conn) SetKeepAlive(period time.Duration) {
-	c.conn.SetDeadline(time.Now().Add(period))
+func (c *Conn) SetReadKeepAlive(period time.Duration) {
+	c.conn.SetReadDeadline(time.Now().Add(period))
+}
+
+func (c *Conn) SetWriteKeepAlive(period time.Duration) {
+	c.writeKeepAlivePeriod = period
+	c.writeKeepAliveTicker = time.NewTicker(c.writeKeepAlivePeriod)
+
+	go func() {
+		for range c.writeKeepAliveTicker.C {
+			_, err := c.WriteKeepAlive()
+			if err != nil {
+				c.Close()
+			}
+		}
+	}()
 }
 
 func (c *Conn) ReadMsg() (*message.Message, error) {
@@ -50,7 +67,7 @@ func (c *Conn) ReadMsg() (*message.Message, error) {
 		return nil, err
 	}
 
-	c.conn.SetDeadline(time.Time{})
+	c.conn.SetReadDeadline(time.Time{})
 
 	fmt.Printf("%s READ: %s\n", c.conn.RemoteAddr().String(), msg.String())
 
@@ -63,6 +80,7 @@ func (c *Conn) WriteMsg(id message.ID, payload message.Payload) (int, error) {
 	if err != nil {
 		return wb, err
 	}
+	c.writeKeepAliveTicker.Reset(c.writeKeepAlivePeriod)
 
 	if nmsg.ID != message.IDRequest {
 		fmt.Printf("%s WRITE: %s\n", c.conn.RemoteAddr().String(), nmsg.String())
@@ -71,7 +89,7 @@ func (c *Conn) WriteMsg(id message.ID, payload message.Payload) (int, error) {
 	return wb, nil
 }
 
-func (c *Conn) KeepAlive() (int, error) {
+func (c *Conn) WriteKeepAlive() (int, error) {
 	nmsg := &message.Message{KeepAlive: true}
 	return message.Write(c.conn, nmsg)
 }
@@ -105,5 +123,8 @@ func (c *Conn) String() string {
 }
 
 func (c *Conn) Close() error {
+	if c.writeKeepAliveTicker != nil {
+		c.writeKeepAliveTicker.Stop()
+	}
 	return c.conn.Close()
 }

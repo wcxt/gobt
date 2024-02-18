@@ -16,6 +16,7 @@ const (
 	MaxPipelinedRequests = 5
 	MaxHashFails         = 15
 	MaxPeerTimeout       = 2*time.Minute + 10*time.Second
+	KeepAlivePeriod      = 1*time.Minute + 30*time.Second
 )
 
 func main() {
@@ -110,8 +111,10 @@ func main() {
 				wg.Done()
 			}()
 
+			conn.SetWriteKeepAlive(KeepAlivePeriod)
+
 			for {
-				conn.SetKeepAlive(MaxPeerTimeout)
+				conn.SetReadKeepAlive(MaxPeerTimeout)
 				msg, err := conn.ReadMsg()
 
 				if err != nil {
