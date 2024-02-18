@@ -103,8 +103,6 @@ func main() {
 			reqQueue := [][]int{}
 			hashFails := 0
 
-			timer := time.NewTimer(MaxPeerTimeout)
-			defer timer.Stop()
 			defer func() {
 				for _, req := range reqQueue {
 					pp.MarkBlockPending(req[0], req[1])
@@ -112,22 +110,14 @@ func main() {
 				wg.Done()
 			}()
 
-			go func() {
-				<-timer.C
-				conn.Close()
-			}()
-
 			for {
+				conn.SetKeepAlive(MaxPeerTimeout)
 				msg, err := conn.ReadMsg()
+
 				if err != nil {
 					fmt.Println(err)
 					return
 				}
-
-				if !timer.Stop() {
-					return
-				}
-				timer.Reset(MaxPeerTimeout)
 
 				if msg.KeepAlive {
 					continue

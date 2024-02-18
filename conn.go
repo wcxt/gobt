@@ -38,7 +38,10 @@ func (c *Conn) Handshake(hash [20]byte, clientID [20]byte) error {
 	}
 
 	return nil
+}
 
+func (c *Conn) SetKeepAlive(period time.Duration) {
+	c.conn.SetDeadline(time.Now().Add(period))
 }
 
 func (c *Conn) ReadMsg() (*message.Message, error) {
@@ -46,6 +49,8 @@ func (c *Conn) ReadMsg() (*message.Message, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	c.conn.SetDeadline(time.Time{})
 
 	fmt.Printf("%s READ: %s\n", c.conn.RemoteAddr().String(), msg.String())
 
