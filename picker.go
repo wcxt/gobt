@@ -11,8 +11,9 @@ import (
 type PieceStatus int
 
 const (
-	PiecePending PieceStatus = iota
-	PieceIncomplete
+	PieceInQueue PieceStatus = iota
+	PieceRequesting
+	PieceResolving
 	PieceDone
 
 	DefaultBlockSize = 16000
@@ -157,8 +158,8 @@ func (p *Picker) MarkBlockPending(pIndex, bIndex int) {
 
 	p.states[pIndex].pending = append(p.states[pIndex].pending, bIndex)
 
-	if p.states[pIndex].status == PieceIncomplete {
-		p.states[pIndex].status = PiecePending
+	if p.states[pIndex].status == PieceResolving {
+		p.states[pIndex].status = PieceRequesting
 		p.ordered = append([]int{pIndex}, p.ordered...)
 	}
 }
@@ -191,9 +192,13 @@ func (p *Picker) pickBlock(pIndex int) int {
 	bIndex := state.pending[0]
 	state.pending = state.pending[1:]
 
+	if state.status == PieceInQueue {
+		state.status = PieceRequesting
+	}
+
 	if len(state.pending) == 0 {
 		p.removePiece(pIndex)
-		state.status = PieceIncomplete
+		state.status = PieceResolving
 		return bIndex
 	}
 
@@ -220,5 +225,5 @@ func (p *Picker) createState(pIndex int) *Piece {
 		pending = append(pending, i)
 	}
 
-	return &Piece{blocks: bCount, pending: pending, done: done, status: PiecePending}
+	return &Piece{blocks: bCount, pending: pending, done: done, status: PieceInQueue}
 }
