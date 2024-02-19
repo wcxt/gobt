@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/edwces/gobt"
@@ -66,11 +68,20 @@ func main() {
 		return
 	}
 
-	defer func() {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-c
+		peerConns.Range(func(key, value any) bool {
+			value.(*gobt.Conn).Close()
+			return true
+		})
 		file.Close()
 		if !clientBf.Full() {
 			os.Remove(metainfo.Info.Name)
 		}
+		os.Exit(0)
 	}()
 
 	var wg sync.WaitGroup
@@ -278,4 +289,8 @@ func main() {
 	}
 
 	wg.Wait()
+	file.Close()
+	if !clientBf.Full() {
+		os.Remove(metainfo.Info.Name)
+	}
 }
