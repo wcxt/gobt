@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/edwces/gobt/bitfield"
+	"golang.org/x/exp/slices"
 )
 
 type PieceStatus int
@@ -82,38 +83,44 @@ func (p *Picker) IncrementPieceAvailability(pIndex int) {
 
 	state := p.getState(pIndex)
 	state.availability++
-}
 
-func (p *Picker) decrementPieceAvailability(pIndex int) {
-	p.Lock()
-	defer p.Unlock()
-
-	state := p.getState(pIndex)
-	state.availability--
+	p.orderPieces()
 }
 
 func (p *Picker) DecrementAvailability(have bitfield.Bitfield) {
+	p.Lock()
+	defer p.Unlock()
+
 	// TEMP Workaround, Should probably use some built-in func in bitfield
 	count := PieceCount(p.tSize, p.pMaxSize)
 	temp := make([]int, count)
 
 	for i := range temp {
 		if has, _ := have.Get(i); has {
-			p.decrementPieceAvailability(i)
+			state := p.getState(i)
+			state.availability--
 		}
 	}
+
+	p.orderPieces()
 }
 
 func (p *Picker) IncrementAvailability(have bitfield.Bitfield) {
+	p.Lock()
+	defer p.Unlock()
+
 	// TEMP Workaround, Should probably use some built-in func in bitfield
 	count := PieceCount(p.tSize, p.pMaxSize)
 	temp := make([]int, count)
 
 	for i := range temp {
 		if has, _ := have.Get(i); has {
-			p.IncrementPieceAvailability(i)
+			state := p.getState(i)
+			state.availability++
 		}
 	}
+
+	p.orderPieces()
 }
 
 func (p *Picker) MarkBlockDone(pIndex, bIndex int) {
@@ -147,8 +154,8 @@ func (p *Picker) MarkPiecePending(pIndex int) {
 
 	p.states[pIndex] = p.createState(pIndex)
 
-	p.ordered = append(p.ordered[:2], p.ordered[1:]...)
-	p.ordered[1] = pIndex
+	p.ordered = append(p.ordered, pIndex)
+	p.orderPieces()
 }
 
 // MarkBlockPending adds block to requests and optionally puts incomplete piece onto the top of picker
@@ -160,7 +167,8 @@ func (p *Picker) MarkBlockPending(pIndex, bIndex int) {
 
 	if p.states[pIndex].status == PieceResolving {
 		p.states[pIndex].status = PieceRequesting
-		p.ordered = append([]int{pIndex}, p.ordered...)
+		p.ordered = append(p.ordered, pIndex)
+		p.orderPieces()
 	}
 }
 
@@ -192,14 +200,15 @@ func (p *Picker) pickBlock(pIndex int) int {
 	bIndex := state.pending[0]
 	state.pending = state.pending[1:]
 
-	if state.status == PieceInQueue {
-		state.status = PieceRequesting
-	}
-
 	if len(state.pending) == 0 {
 		p.removePiece(pIndex)
 		state.status = PieceResolving
 		return bIndex
+	}
+
+	if state.status == PieceInQueue {
+		state.status = PieceRequesting
+		p.orderPieces()
 	}
 
 	return bIndex
@@ -226,4 +235,28 @@ func (p *Picker) createState(pIndex int) *Piece {
 	}
 
 	return &Piece{blocks: bCount, pending: pending, done: done, status: PieceInQueue}
+}
+
+func (p *Picker) orderPieces() {
+	slices.SortFunc(p.ordered, func(a, b int) int {
+		aState := p.getState(a)
+		bState := p.getState(b)
+
+		if aState.status == PieceRequesting && bState.status == PieceInQueue {
+			return -1
+		} else if bState.status == PieceRequesting && aState.status == PieceInQueue {
+			return 1
+		} else if aState.status == bState.status {
+			// Sort based on availability
+			if aState.availability < bState.availability {
+				return -1
+			} else if bState.availability < aState.availability {
+				return 1
+			} else {
+				return 0
+			}
+		}
+
+		return 0
+	})
 }
