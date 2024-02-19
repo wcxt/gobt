@@ -33,6 +33,8 @@ type Piece struct {
 	pending []int
 	done    []int
 	status  PieceStatus
+
+	availability int
 }
 
 type Picker struct {
@@ -71,6 +73,46 @@ func (p *Picker) Pick(have bitfield.Bitfield) (int, int, error) {
 	bIndex := p.pickBlock(pIndex)
 
 	return pIndex, bIndex, nil
+}
+
+func (p *Picker) IncrementPieceAvailability(pIndex int) {
+	p.Lock()
+	defer p.Unlock()
+
+	state := p.getState(pIndex)
+	state.availability++
+}
+
+func (p *Picker) decrementPieceAvailability(pIndex int) {
+	p.Lock()
+	defer p.Unlock()
+
+	state := p.getState(pIndex)
+	state.availability--
+}
+
+func (p *Picker) DecrementAvailability(have bitfield.Bitfield) {
+	// TEMP Workaround, Should probably use some built-in func in bitfield
+	count := PieceCount(p.tSize, p.pMaxSize)
+	temp := make([]int, count)
+
+	for i := range temp {
+		if has, _ := have.Get(i); has {
+			p.decrementPieceAvailability(i)
+		}
+	}
+}
+
+func (p *Picker) IncrementAvailability(have bitfield.Bitfield) {
+	// TEMP Workaround, Should probably use some built-in func in bitfield
+	count := PieceCount(p.tSize, p.pMaxSize)
+	temp := make([]int, count)
+
+	for i := range temp {
+		if has, _ := have.Get(i); has {
+			p.IncrementPieceAvailability(i)
+		}
+	}
 }
 
 func (p *Picker) MarkBlockDone(pIndex, bIndex int) {

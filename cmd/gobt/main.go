@@ -119,6 +119,7 @@ func main() {
 				for _, req := range reqQueue {
 					pp.MarkBlockPending(req[0], req[1])
 				}
+				pp.DecrementAvailability(bf)
 				wg.Done()
 			}()
 
@@ -250,6 +251,8 @@ func main() {
 						return
 					}
 
+					pp.IncrementPieceAvailability(have)
+
 					if has, _ := clientBf.Get(have); !interesting && !has {
 						_, err := conn.WriteInterested()
 						if err != nil {
@@ -265,6 +268,8 @@ func main() {
 						fmt.Printf("Bitfield: %v\n", err)
 						return
 					}
+
+					pp.IncrementAvailability(bf)
 
 					// Calculate interesting pieces that peer has
 					diff, err := bf.Difference(clientBf)
