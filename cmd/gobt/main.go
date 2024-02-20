@@ -77,11 +77,6 @@ func main() {
 			value.(*gobt.Conn).Close()
 			return true
 		})
-		file.Close()
-		if !clientBf.Full() {
-			os.Remove(metainfo.Info.Name)
-		}
-		os.Exit(0)
 	}()
 
 	var wg sync.WaitGroup
@@ -160,6 +155,14 @@ func main() {
 							clientBf.Set(int(block.Index))
 							fmt.Printf("-------------------------------------------------- %s GOT: %d; DONE: %d \n", peer.Addr(), block.Index, pCount)
 							file.WriteAt(storage.GetPieceData(int(block.Index)), int64(int(block.Index)*metainfo.Info.PieceLength))
+
+							peerConns.Range(func(key, value any) bool {
+								_, err := value.(*gobt.Conn).WriteHave(int(block.Index))
+								if err != nil {
+									value.(*gobt.Conn).Close()
+								}
+								return true
+							})
 
 							if clientBf.Full() {
 								peerConns.Range(func(key, value any) bool {
