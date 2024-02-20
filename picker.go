@@ -3,6 +3,7 @@ package gobt
 import (
 	"errors"
 	"math"
+	"math/rand"
 	"sync"
 
 	"github.com/edwces/gobt/bitfield"
@@ -17,7 +18,8 @@ const (
 	PieceResolving
 	PieceDone
 
-	DefaultBlockSize = 16000
+	DefaultBlockSize      = 16000
+	RandomPieceEndCounter = 5
 )
 
 func PieceCount(tSize, pMaxSize int) int {
@@ -40,6 +42,7 @@ type Piece struct {
 }
 
 type Picker struct {
+	pCounter int
 	tSize    int
 	pMaxSize int
 
@@ -174,13 +177,52 @@ func (p *Picker) MarkBlockInQueue(pIndex, bIndex int) {
 
 // pickPiece returns and removes piece that is available in peer bitfield from picker ordered pieces.
 func (p *Picker) pickPiece(have bitfield.Bitfield) (int, error) {
-	for _, val := range p.ordered {
+	reqBoundary := 0
+
+	for i, val := range p.ordered {
+		state := p.getState(val)
+
+		if state.status == PieceInQueue {
+			reqBoundary = i
+			break
+		}
+
 		if have, _ := have.Get(val); have {
 			return val, nil
 		}
 	}
 
-	return 0, errors.New("No pieces found")
+	if p.pCounter < RandomPieceEndCounter {
+		return p.pickRandomPiece(have, reqBoundary)
+	}
+
+	return p.pickRarestPiece(have, reqBoundary)
+}
+
+func (p *Picker) pickRandomPiece(have bitfield.Bitfield, reqBoundary int) (int, error) {
+	ordCopy := make([]int, len(p.ordered)-reqBoundary)
+	copy(ordCopy, p.ordered[reqBoundary:])
+	rand.Shuffle(len(ordCopy), func(i, j int) {
+		ordCopy[i], ordCopy[j] = ordCopy[j], ordCopy[i]
+	})
+
+	for _, val := range ordCopy {
+		if have, _ := have.Get(val); have {
+			return val, nil
+		}
+	}
+
+	return 0, errors.New("No piece found")
+}
+
+func (p *Picker) pickRarestPiece(have bitfield.Bitfield, reqBoundary int) (int, error) {
+	for _, val := range p.ordered[reqBoundary:] {
+		if have, _ := have.Get(val); have {
+			return val, nil
+		}
+	}
+
+	return 0, errors.New("No piece found")
 }
 
 // removePiece returns true if succesfully removes piece from picker
@@ -208,6 +250,7 @@ func (p *Picker) pickBlock(pIndex int) int {
 
 	if state.status == PieceInQueue {
 		state.status = PieceRequesting
+		p.pCounter++
 		p.orderPieces()
 	}
 
