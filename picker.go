@@ -32,9 +32,9 @@ func BlockCount(tSize, pMaxSize, pIndex int) int {
 type Piece struct {
 	blocks int
 
-	pending []int
-	done    []int
-	status  PieceStatus
+	queue  []int
+	done   []int
+	status PieceStatus
 
 	availability int
 }
@@ -144,11 +144,11 @@ func (p *Picker) IsPieceDone(pIndex int) bool {
 	return state.status == PieceDone
 }
 
-// MarkPiecePending clears piece state and readds it to the picker
+// MarkPieceInQueue clears piece state and readds it to the picker
 // NOTE: This method is unoptimized as it may cause loop where
 //
 //	the same peer/peers is constantly corrupting piece
-func (p *Picker) MarkPiecePending(pIndex int) {
+func (p *Picker) MarkPieceInQueue(pIndex int) {
 	p.Lock()
 	defer p.Unlock()
 
@@ -158,12 +158,12 @@ func (p *Picker) MarkPiecePending(pIndex int) {
 	p.orderPieces()
 }
 
-// MarkBlockPending adds block to requests and optionally puts incomplete piece onto the top of picker
-func (p *Picker) MarkBlockPending(pIndex, bIndex int) {
+// MarkBlockInQueue adds block to requests and optionally puts incomplete piece onto the top of picker
+func (p *Picker) MarkBlockInQueue(pIndex, bIndex int) {
 	p.Lock()
 	defer p.Unlock()
 
-	p.states[pIndex].pending = append(p.states[pIndex].pending, bIndex)
+	p.states[pIndex].queue = append(p.states[pIndex].queue, bIndex)
 
 	if p.states[pIndex].status == PieceResolving {
 		p.states[pIndex].status = PieceRequesting
@@ -197,10 +197,10 @@ func (p *Picker) removePiece(pIndex int) bool {
 // pickBlock returns block index and removes piece from picker if all blocks have been requested
 func (p *Picker) pickBlock(pIndex int) int {
 	state := p.getState(pIndex)
-	bIndex := state.pending[0]
-	state.pending = state.pending[1:]
+	bIndex := state.queue[0]
+	state.queue = state.queue[1:]
 
-	if len(state.pending) == 0 {
+	if len(state.queue) == 0 {
 		p.removePiece(pIndex)
 		state.status = PieceResolving
 		return bIndex
@@ -234,7 +234,7 @@ func (p *Picker) createState(pIndex int) *Piece {
 		pending = append(pending, i)
 	}
 
-	return &Piece{blocks: bCount, pending: pending, done: done, status: PieceInQueue}
+	return &Piece{blocks: bCount, queue: pending, done: done, status: PieceInQueue}
 }
 
 func (p *Picker) orderPieces() {
