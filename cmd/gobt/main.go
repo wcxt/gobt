@@ -59,7 +59,7 @@ func main() {
 	pp := gobt.NewPicker(metainfo.Info.Length, metainfo.Info.PieceLength)
 	storage := gobt.NewStorage(metainfo.Info.Length, metainfo.Info.PieceLength)
 	clientBf := bitfield.New(len(hashes))
-	peerConns := sync.Map{}
+	connected := gobt.NewPeersManager()
 	pCount := 0
 
 	file, err := os.Create(metainfo.Info.Name)
@@ -73,7 +73,7 @@ func main() {
 
 	go func() {
 		<-c
-		peerConns.Range(func(key, value any) bool {
+		connected.GetPeers().Range(func(key, value any) bool {
 			value.(*gobt.Conn).Close()
 			return true
 		})
@@ -100,7 +100,7 @@ func main() {
 				return
 			}
 
-			peerConns.Store(conn.String(), conn)
+			connected.Add(conn)
 
 			// Message loop
 			interesting := false
@@ -115,6 +115,7 @@ func main() {
 					pp.MarkBlockInQueue(req[0], req[1])
 				}
 				pp.DecrementAvailability(bf)
+				connected.Remove(conn)
 				wg.Done()
 			}()
 
@@ -156,7 +157,7 @@ func main() {
 							fmt.Printf("-------------------------------------------------- %s GOT: %d; DONE: %d \n", peer.Addr(), block.Index, pCount)
 							file.WriteAt(storage.GetPieceData(int(block.Index)), int64(int(block.Index)*metainfo.Info.PieceLength))
 
-							peerConns.Range(func(key, value any) bool {
+							connected.GetPeers().Range(func(key, value any) bool {
 								_, err := value.(*gobt.Conn).WriteHave(int(block.Index))
 								if err != nil {
 									value.(*gobt.Conn).Close()
@@ -165,7 +166,7 @@ func main() {
 							})
 
 							if clientBf.Full() {
-								peerConns.Range(func(key, value any) bool {
+								connected.GetPeers().Range(func(key, value any) bool {
 									value.(*gobt.Conn).Close()
 									return true
 								})
