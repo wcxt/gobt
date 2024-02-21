@@ -18,6 +18,22 @@ func (pm *PeersManager) Remove(peer *Conn) {
 	pm.peers.Delete(peer.String())
 }
 
-func (pm *PeersManager) GetPeers() *sync.Map {
-	return &pm.peers
+func (pm *PeersManager) Disconnect() {
+	pm.peers.Range(func(key, value any) bool {
+		value.(*Conn).Close()
+		return true
+	})
+}
+
+func (pm *PeersManager) WriteHave(have int) {
+	pm.peers.Range(func(key, value any) bool {
+		peer := value.(*Conn)
+
+		_, err := peer.WriteHave(have)
+		if err != nil {
+			peer.Close()
+		}
+
+		return true
+	})
 }

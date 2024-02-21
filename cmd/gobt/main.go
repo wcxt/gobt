@@ -73,10 +73,7 @@ func main() {
 
 	go func() {
 		<-c
-		connected.GetPeers().Range(func(key, value any) bool {
-			value.(*gobt.Conn).Close()
-			return true
-		})
+		connected.Disconnect()
 	}()
 
 	var wg sync.WaitGroup
@@ -157,21 +154,11 @@ func main() {
 							fmt.Printf("-------------------------------------------------- %s GOT: %d; DONE: %d \n", peer.Addr(), block.Index, pCount)
 							file.WriteAt(storage.GetPieceData(int(block.Index)), int64(int(block.Index)*metainfo.Info.PieceLength))
 
-							connected.GetPeers().Range(func(key, value any) bool {
-								_, err := value.(*gobt.Conn).WriteHave(int(block.Index))
-								if err != nil {
-									value.(*gobt.Conn).Close()
-								}
-								return true
-							})
+							connected.WriteHave(int(block.Index))
 
 							if clientBf.Full() {
-								connected.GetPeers().Range(func(key, value any) bool {
-									value.(*gobt.Conn).Close()
-									return true
-								})
+								connected.Disconnect()
 							}
-
 						} else {
 							fmt.Printf("-------------------------------------------------- %s GOT FAILED: %d; \n", peer.Addr(), block.Index)
 							pp.MarkPieceInQueue(int(block.Index))
