@@ -34,9 +34,10 @@ func BlockCount(tSize, pMaxSize, pIndex int) int {
 type Piece struct {
 	blocks int
 
-	queue  []int
-	done   []int
-	status PieceStatus
+	queue     []int
+	resolving []int
+	done      []int
+	status    PieceStatus
 
 	availability int
 }
@@ -133,6 +134,12 @@ func (p *Picker) MarkBlockDone(pIndex, bIndex int) {
 	state := p.getState(pIndex)
 	state.done = append(state.done, bIndex)
 
+	for i, b := range state.resolving {
+		if b == bIndex {
+			state.resolving = append(state.resolving[:i], state.resolving[i+1:]...)
+		}
+	}
+
 	if len(state.done) == state.blocks {
 		state.status = PieceDone
 	}
@@ -167,6 +174,12 @@ func (p *Picker) MarkBlockInQueue(pIndex, bIndex int) {
 	defer p.Unlock()
 
 	p.states[pIndex].queue = append(p.states[pIndex].queue, bIndex)
+
+	for i, b := range p.states[pIndex].resolving {
+		if b == bIndex {
+			p.states[pIndex].resolving = append(p.states[pIndex].resolving[:i], p.states[pIndex].resolving[i+1:]...)
+		}
+	}
 
 	if p.states[pIndex].status == PieceResolving {
 		p.states[pIndex].status = PieceRequesting
@@ -241,6 +254,7 @@ func (p *Picker) pickBlock(pIndex int) int {
 	state := p.getState(pIndex)
 	bIndex := state.queue[0]
 	state.queue = state.queue[1:]
+	state.resolving = append(state.resolving, bIndex)
 
 	if len(state.queue) == 0 {
 		p.removePiece(pIndex)
