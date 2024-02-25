@@ -77,10 +77,10 @@ func (p *Picker) Pick(have bitfield.Bitfield, peer string) (int, int, error) {
 	p.Lock()
 	defer p.Unlock()
 
-	// if len(p.ordered) == 0 {
-	// 	return p.pickEndgame(have, peer)
-	// }
-	//
+	if len(p.ordered) == 0 {
+		return p.pickEndgame(have, peer)
+	}
+
 	pIndex, error := p.pickPiece(have)
 
 	if error != nil {
@@ -215,6 +215,39 @@ func (p *Picker) pickPiece(have bitfield.Bitfield) (int, error) {
 	}
 
 	return p.pickRarestPiece(have, reqBoundary)
+}
+
+func (p *Picker) pickEndgame(have bitfield.Bitfield, peer string) (int, int, error) {
+	for pIndex, state := range p.states {
+		if state.status == PieceResolving {
+			has, _ := have.Get(pIndex)
+			if !has {
+				continue
+			}
+
+			bIndex, err := p.pickBlockEndgame(pIndex, peer)
+			if err != nil {
+				continue
+			}
+
+			state.blocks[bIndex].peers = append(state.blocks[bIndex].peers, peer)
+			return pIndex, bIndex, nil
+		}
+	}
+
+	return 0, 0, errors.New("No piece found")
+}
+
+func (p *Picker) pickBlockEndgame(pIndex int, peer string) (int, error) {
+	state := p.getState(pIndex)
+
+	for bIndex, block := range state.blocks {
+		if block.status == BlockResolving && !slices.Contains(block.peers, peer) {
+			return bIndex, nil
+		}
+	}
+
+	return 0, errors.New("No blocks found")
 }
 
 func (p *Picker) pickRandomPiece(have bitfield.Bitfield, reqBoundary int) (int, error) {
