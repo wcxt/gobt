@@ -73,17 +73,21 @@ func NewPicker(tSize, pMaxSize int) *Picker {
 }
 
 // Pick gets a new block from pieces that are available in bitfield.
-func (p *Picker) Pick(have bitfield.Bitfield) (int, int, error) {
+func (p *Picker) Pick(have bitfield.Bitfield, peer string) (int, int, error) {
 	p.Lock()
 	defer p.Unlock()
 
+	// if len(p.ordered) == 0 {
+	// 	return p.pickEndgame(have, peer)
+	// }
+	//
 	pIndex, error := p.pickPiece(have)
 
 	if error != nil {
 		return 0, 0, error
 	}
 
-	bIndex := p.pickBlock(pIndex)
+	bIndex := p.pickBlock(pIndex, peer)
 
 	return pIndex, bIndex, nil
 }
@@ -120,7 +124,7 @@ func (p *Picker) IncrementAvailability(have bitfield.Bitfield) {
 	p.Lock()
 	defer p.Unlock()
 
-	// TEMP Workaround, Should probably use some built-in func in bitfield
+	//  TEMP Workaround, Should probably use some built-in func in bitfield
 	count := PieceCount(p.tSize, p.pMaxSize)
 	temp := make([]int, count)
 
@@ -134,12 +138,13 @@ func (p *Picker) IncrementAvailability(have bitfield.Bitfield) {
 	p.orderPieces()
 }
 
-func (p *Picker) MarkBlockDone(pIndex, bIndex int) {
+func (p *Picker) MarkBlockDone(pIndex int, bIndex int, peer string) {
 	p.Lock()
 	defer p.Unlock()
 
 	state := p.getState(pIndex)
 	state.blocks[bIndex].status = BlockDone
+	state.blocks[bIndex].peers = slices.DeleteFunc(state.blocks[bIndex].peers, func(e string) bool { return e == peer })
 
 	for _, block := range state.blocks {
 		if block.status != BlockDone {
@@ -174,12 +179,13 @@ func (p *Picker) MarkPieceInQueue(pIndex int) {
 }
 
 // MarkBlockInQueue adds block to requests and optionally puts incomplete piece onto the top of picker
-func (p *Picker) MarkBlockInQueue(pIndex, bIndex int) {
+func (p *Picker) MarkBlockInQueue(pIndex int, bIndex int, peer string) {
 	p.Lock()
 	defer p.Unlock()
 
 	state := p.getState(pIndex)
 	state.blocks[bIndex].status = BlockInQueue
+	state.blocks[bIndex].peers = slices.DeleteFunc(state.blocks[bIndex].peers, func(e string) bool { return e == peer })
 
 	if state.status == PieceResolving {
 		state.status = PieceRequesting
@@ -249,7 +255,7 @@ func (p *Picker) removePiece(pIndex int) bool {
 }
 
 // pickBlock returns block index and removes piece from picker if all blocks have been requested
-func (p *Picker) pickBlock(pIndex int) int {
+func (p *Picker) pickBlock(pIndex int, peer string) int {
 	state := p.getState(pIndex)
 	var bIndex int
 
@@ -257,6 +263,7 @@ func (p *Picker) pickBlock(pIndex int) int {
 		if block.status == BlockInQueue {
 			bIndex = bi
 			block.status = BlockResolving
+			block.peers = append(block.peers, peer)
 			break
 		}
 	}

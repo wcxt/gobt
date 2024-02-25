@@ -109,7 +109,7 @@ func main() {
 
 			defer func() {
 				for _, req := range reqQueue {
-					pp.MarkBlockInQueue(req[0], req[1])
+					pp.MarkBlockInQueue(req[0], req[1], conn.String())
 				}
 				pp.DecrementAvailability(bf)
 				connected.Remove(conn)
@@ -138,13 +138,13 @@ func main() {
 					block := msg.Payload.Block()
 
 					if int(block.Index) != reqQueue[0][0] || int(block.Offset) != (reqQueue[0][1]*gobt.DefaultBlockSize) || len(block.Block) != reqQueue[0][2] {
-						fmt.Println("Invalid block received")
+						fmt.Printf("Invalid block received: %d %d, want %d %d \n", block.Index, block.Offset/gobt.DefaultBlockSize, reqQueue[0][0], reqQueue[0][1])
 						return
 					}
 
 					// Store piece
 					storage.SaveAt(int(block.Index), block.Block, int(block.Offset))
-					pp.MarkBlockDone(reqQueue[0][0], reqQueue[0][1])
+					pp.MarkBlockDone(reqQueue[0][0], reqQueue[0][1], conn.String())
 					reqQueue = reqQueue[1:]
 
 					if pp.IsPieceDone(int(block.Index)) {
@@ -172,7 +172,7 @@ func main() {
 
 					for len(reqQueue) < MaxPipelinedRequests && interesting {
 						// Send request
-						cp, cb, err := pp.Pick(bf)
+						cp, cb, err := pp.Pick(bf, conn.String())
 
 						if err != nil {
 							_, err := conn.WriteNotInterested()
@@ -206,7 +206,7 @@ func main() {
 						var cp, cb int
 
 						if len(unresolved) == 0 {
-							cp, cb, err = pp.Pick(bf)
+							cp, cb, err = pp.Pick(bf, conn.String())
 
 							if err != nil {
 								_, err := conn.WriteNotInterested()
