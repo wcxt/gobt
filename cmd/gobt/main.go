@@ -102,9 +102,6 @@ func main() {
 			connected.Add(peer)
 
 			// Message loop
-			interesting := false
-			choked := true
-
 			bf := bitfield.New(len(hashes))
 			reqQueue := [][]int{}
 			hashFails := 0
@@ -135,7 +132,7 @@ func main() {
 
 				switch msg.ID {
 				case message.IDChoke:
-					choked = true
+					peer.IsChoking = true
 				case message.IDPiece:
 					block := msg.Payload.Block()
 
@@ -172,17 +169,16 @@ func main() {
 						}
 					}
 
-					for len(reqQueue) < MaxPipelinedRequests && interesting {
+					for len(reqQueue) < MaxPipelinedRequests && peer.IsInteresting() {
 						// Send request
 						cp, cb, err := pp.Pick(bf, peer.String())
 
 						if err != nil {
-							_, err := peer.WriteNotInterested()
+							err := peer.SendNotInterested()
 							if err != nil {
 								fmt.Println(err)
 								return
 							}
-							interesting = false
 							break
 						}
 
@@ -198,12 +194,12 @@ func main() {
 				case message.IDUnchoke:
 
 					unresolved := [][]int{}
-					if choked {
+					if peer.IsChoking {
 						unresolved = reqQueue
 						reqQueue = [][]int{}
 					}
 
-					for len(reqQueue) < MaxPipelinedRequests && interesting {
+					for len(reqQueue) < MaxPipelinedRequests && peer.IsInteresting() {
 						// Pick block to request
 						var cp, cb int
 
@@ -211,12 +207,11 @@ func main() {
 							cp, cb, err = pp.Pick(bf, peer.String())
 
 							if err != nil {
-								_, err := peer.WriteNotInterested()
+								err := peer.SendNotInterested()
 								if err != nil {
 									fmt.Println(err)
 									return
 								}
-								interesting = false
 								break
 							}
 						} else {
@@ -234,7 +229,7 @@ func main() {
 						}
 					}
 
-					choked = false
+					peer.IsChoking = false
 				case message.IDHave:
 					have := int(msg.Payload.Have())
 					err := bf.Set(have)
@@ -246,13 +241,12 @@ func main() {
 
 					pp.IncrementPieceAvailability(have)
 
-					if has, _ := clientBf.Get(have); !interesting && !has {
-						_, err := peer.WriteInterested()
+					if has, _ := clientBf.Get(have); !peer.IsInteresting() && !has {
+						err := peer.SendInterested()
 						if err != nil {
 							fmt.Println(err)
 							return
 						}
-						interesting = true
 					}
 				case message.IDBitfield:
 					// Define peer bitfield
@@ -273,12 +267,11 @@ func main() {
 
 					// Send interest status if it's not empty
 					if !diff.Empty() {
-						_, err := peer.WriteInterested()
+						err := peer.SendInterested()
 						if err != nil {
 							fmt.Println(err)
 							return
 						}
-						interesting = true
 					}
 					// conn.WriteUnchoke()
 				}

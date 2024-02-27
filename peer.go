@@ -12,12 +12,15 @@ import (
 type Peer struct {
 	conn net.Conn
 
+	isInteresting bool
+	IsChoking     bool
+
 	writeKeepAlivePeriod time.Duration
 	writeKeepAliveTicker *time.Ticker
 }
 
 func NewPeer(conn net.Conn) *Peer {
-	return &Peer{conn: conn}
+	return &Peer{conn: conn, isInteresting: false, IsChoking: true}
 }
 
 func (p *Peer) Handshake(hash, clientID [20]byte) error {
@@ -52,6 +55,30 @@ func (p *Peer) SetWriteKeepAlive(period time.Duration) {
 			}
 		}
 	}()
+}
+
+func (p *Peer) SendInterested() error {
+	_, err := p.WriteMsg(message.IDInterested, nil)
+	if err != nil {
+		return nil
+	}
+
+	p.isInteresting = true
+	return nil
+}
+
+func (p *Peer) SendNotInterested() error {
+	_, err := p.WriteMsg(message.IDNotInterested, nil)
+	if err != nil {
+		return nil
+	}
+
+	p.isInteresting = false
+	return nil
+}
+
+func (p *Peer) IsInteresting() bool {
+	return p.isInteresting
 }
 
 func (p *Peer) ReadMsg() (*message.Message, error) {
@@ -89,14 +116,6 @@ func (p *Peer) WriteKeepAlive() (int, error) {
 
 func (p *Peer) WriteUnchoke() (int, error) {
 	return p.WriteMsg(message.IDUnchoke, nil)
-}
-
-func (p *Peer) WriteInterested() (int, error) {
-	return p.WriteMsg(message.IDInterested, nil)
-}
-
-func (p *Peer) WriteNotInterested() (int, error) {
-	return p.WriteMsg(message.IDNotInterested, nil)
 }
 
 func (p *Peer) WriteRequest(index, offset, length int) (int, error) {
