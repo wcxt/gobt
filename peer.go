@@ -1,6 +1,7 @@
 package gobt
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -9,18 +10,30 @@ import (
 	"github.com/edwces/gobt/message"
 )
 
+const (
+	MaxRequestCountPerPeer = 5
+	MaxHashFails           = 15
+)
+
+// NOTES: This module will be probably be one of the higher level and will
+// be responsible for handling most of the logic for messages. Thus he will need
+// to have access torrent size, piece size etc.; piece state; and overral most of the modules
+// REFACTOR: Messy for now, Leaking most of the information about peer
 type Peer struct {
 	conn net.Conn
 
-	isInteresting bool
+	IsInteresting bool
 	IsChoking     bool
+
+	Requests  [][]int
+	HashFails int
 
 	writeKeepAlivePeriod time.Duration
 	writeKeepAliveTicker *time.Ticker
 }
 
 func NewPeer(conn net.Conn) *Peer {
-	return &Peer{conn: conn, isInteresting: false, IsChoking: true}
+	return &Peer{conn: conn, IsInteresting: false, IsChoking: true, Requests: [][]int{}, HashFails: 0}
 }
 
 func (p *Peer) Handshake(hash, clientID [20]byte) error {
@@ -63,7 +76,7 @@ func (p *Peer) SendInterested() error {
 		return nil
 	}
 
-	p.isInteresting = true
+	p.IsInteresting = true
 	return nil
 }
 
@@ -73,12 +86,43 @@ func (p *Peer) SendNotInterested() error {
 		return nil
 	}
 
-	p.isInteresting = false
+	p.IsInteresting = false
 	return nil
 }
 
-func (p *Peer) IsInteresting() bool {
-	return p.isInteresting
+func (p *Peer) RecvRequest(index, offset, length int) error {
+	req := p.Requests[0]
+
+	if req[0] != index {
+		return errors.New("invalid index")
+	}
+	if req[1]*DefaultBlockSize != offset {
+		return errors.New("invalid offset")
+	}
+	if req[2] != length {
+		return errors.New("invalid length")
+	}
+
+	p.Requests = p.Requests[1:]
+	return nil
+}
+
+func (p *Peer) SendRequest(index, offset, length int) error {
+	req := message.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
+	fmt.Printf("%s WRITE REQUEST: %d %d %d\n", p.conn.RemoteAddr().String(), index, offset, length)
+	payload := message.NewRequestPayload(req)
+
+	p.Requests = append(p.Requests, []int{index, offset / DefaultBlockSize, length})
+	_, err := p.WriteMsg(message.IDRequest, payload)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *Peer) IsRequestable() bool {
+	return len(p.Requests) < MaxRequestCountPerPeer && p.IsInteresting
 }
 
 func (p *Peer) ReadMsg() (*message.Message, error) {
@@ -116,13 +160,6 @@ func (p *Peer) WriteKeepAlive() (int, error) {
 
 func (p *Peer) WriteUnchoke() (int, error) {
 	return p.WriteMsg(message.IDUnchoke, nil)
-}
-
-func (p *Peer) WriteRequest(index, offset, length int) (int, error) {
-	req := message.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
-	fmt.Printf("%s WRITE REQUEST: %d %d %d\n", p.conn.RemoteAddr().String(), index, offset, length)
-	payload := message.NewRequestPayload(req)
-	return p.WriteMsg(message.IDRequest, payload)
 }
 
 func (p *Peer) WriteHave(index int) (int, error) {

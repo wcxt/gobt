@@ -16,11 +16,9 @@ import (
 )
 
 const (
-	MaxPipelinedRequests = 5
-	MaxHashFails         = 15
-	MaxPeerTimeout       = 2*time.Minute + 10*time.Second
-	KeepAlivePeriod      = 1*time.Minute + 30*time.Second
-	DefaultConnTimeout   = 3 * time.Second
+	MaxPeerTimeout     = 2*time.Minute + 10*time.Second
+	KeepAlivePeriod    = 1*time.Minute + 30*time.Second
+	DefaultConnTimeout = 3 * time.Second
 )
 
 func main() {
@@ -103,11 +101,9 @@ func main() {
 
 			// Message loop
 			bf := bitfield.New(len(hashes))
-			reqQueue := [][]int{}
-			hashFails := 0
 
 			defer func() {
-				for _, req := range reqQueue {
+				for _, req := range peer.Requests {
 					pp.MarkBlockInQueue(req[0], req[1], peer.String())
 				}
 				pp.DecrementAvailability(bf)
@@ -136,15 +132,15 @@ func main() {
 				case message.IDPiece:
 					block := msg.Payload.Block()
 
-					if int(block.Index) != reqQueue[0][0] || int(block.Offset) != (reqQueue[0][1]*gobt.DefaultBlockSize) || len(block.Block) != reqQueue[0][2] {
-						fmt.Printf("Invalid block received: %d %d, want %d %d \n", block.Index, block.Offset/gobt.DefaultBlockSize, reqQueue[0][0], reqQueue[0][1])
+					err := peer.RecvRequest(int(block.Index), int(block.Offset), len(block.Block))
+					if err != nil {
+						fmt.Printf("invalid block received: %v\n", err)
 						return
 					}
 
 					// Store piece
 					storage.SaveAt(int(block.Index), block.Block, int(block.Offset))
-					pp.MarkBlockDone(reqQueue[0][0], reqQueue[0][1], peer.String())
-					reqQueue = reqQueue[1:]
+					pp.MarkBlockDone(int(block.Index), int(block.Offset), peer.String())
 
 					if pp.IsPieceDone(int(block.Index)) {
 						if storage.Verify(int(block.Index), hashes[block.Index]) {
@@ -161,15 +157,15 @@ func main() {
 						} else {
 							fmt.Printf("-------------------------------------------------- %s GOT FAILED: %d; \n", announcePeer.Addr(), block.Index)
 							pp.MarkPieceInQueue(int(block.Index))
-							hashFails += 1
-							if hashFails >= MaxHashFails {
+							peer.HashFails += 1
+							if peer.HashFails >= gobt.MaxHashFails {
 								fmt.Println("Excedded Maximum hash fails: 5")
 								return
 							}
 						}
 					}
 
-					for len(reqQueue) < MaxPipelinedRequests && peer.IsInteresting() {
+					for peer.IsRequestable() {
 						// Send request
 						cp, cb, err := pp.Pick(bf, peer.String())
 
@@ -183,8 +179,7 @@ func main() {
 						}
 
 						length := int(math.Min(float64(gobt.DefaultBlockSize), float64(metainfo.Info.PieceLength)-float64(cb*gobt.DefaultBlockSize)))
-						reqQueue = append(reqQueue, []int{cp, cb, length})
-						_, err = peer.WriteRequest(cp, cb*gobt.DefaultBlockSize, length)
+						err = peer.SendRequest(cp, cb*gobt.DefaultBlockSize, length)
 						if err != nil {
 							fmt.Println(err)
 							return
@@ -195,11 +190,11 @@ func main() {
 
 					unresolved := [][]int{}
 					if peer.IsChoking {
-						unresolved = reqQueue
-						reqQueue = [][]int{}
+						unresolved = peer.Requests
+						peer.Requests = [][]int{}
 					}
 
-					for len(reqQueue) < MaxPipelinedRequests && peer.IsInteresting() {
+					for peer.IsRequestable() {
 						// Pick block to request
 						var cp, cb int
 
@@ -221,8 +216,7 @@ func main() {
 						}
 
 						length := int(math.Min(float64(gobt.DefaultBlockSize), float64(metainfo.Info.PieceLength)-float64(cb*gobt.DefaultBlockSize)))
-						reqQueue = append(reqQueue, []int{cp, cb, length})
-						_, err = peer.WriteRequest(cp, cb*gobt.DefaultBlockSize, length)
+						err = peer.SendRequest(cp, cb*gobt.DefaultBlockSize, length)
 						if err != nil {
 							fmt.Println(err)
 							return
@@ -241,7 +235,7 @@ func main() {
 
 					pp.IncrementPieceAvailability(have)
 
-					if has, _ := clientBf.Get(have); !peer.IsInteresting() && !has {
+					if has, _ := clientBf.Get(have); !peer.IsInteresting && !has {
 						err := peer.SendInterested()
 						if err != nil {
 							fmt.Println(err)
