@@ -25,13 +25,35 @@ func (pm *PeersManager) Disconnect() {
 	})
 }
 
-func (pm *PeersManager) WriteHave(have int) {
+func (pm *PeersManager) WriteHave(have int, peerID string) {
 	pm.peers.Range(func(key, value any) bool {
 		peer := value.(*Peer)
+
+		if peer.String() == peerID {
+			return true
+		}
 
 		_, err := peer.WriteHave(have)
 		if err != nil {
 			peer.Close()
+		}
+
+		return true
+	})
+}
+
+func (pm *PeersManager) WriteCancel(index int, offset int, length int, peerID string) {
+	pm.peers.Range(func(key, value any) bool {
+		peer := value.(*Peer)
+
+		if peer.String() == peerID {
+			return true
+		}
+
+		err := peer.SendCancel(index, offset, length)
+		if err != nil {
+			peer.Close()
+			return true
 		}
 
 		return true

@@ -138,9 +138,13 @@ func main() {
 						return
 					}
 
+					pp.MarkBlockDone(int(block.Index), int(block.Offset)/gobt.DefaultBlockSize, peer.String())
+					if pp.IsBlockResolving(int(block.Index), int(block.Offset)/gobt.DefaultBlockSize) {
+						connected.WriteCancel(int(block.Index), int(block.Offset), len(block.Block), peer.String())
+					}
+
 					// Store piece
 					storage.SaveAt(int(block.Index), block.Block, int(block.Offset))
-					pp.MarkBlockDone(int(block.Index), int(block.Offset), peer.String())
 
 					if pp.IsPieceDone(int(block.Index)) {
 						if storage.Verify(int(block.Index), hashes[block.Index]) {
@@ -149,7 +153,7 @@ func main() {
 							fmt.Printf("-------------------------------------------------- %s GOT: %d; DONE: %d \n", announcePeer.Addr(), block.Index, pCount)
 							file.WriteAt(storage.GetPieceData(int(block.Index)), int64(int(block.Index)*metainfo.Info.PieceLength))
 
-							connected.WriteHave(int(block.Index))
+							connected.WriteHave(int(block.Index), peer.String())
 
 							if clientBf.Full() {
 								connected.Disconnect()

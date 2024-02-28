@@ -156,6 +156,14 @@ func (p *Picker) MarkBlockDone(pIndex int, bIndex int, peer string) {
 
 }
 
+func (p *Picker) IsBlockResolving(pIndex int, bIndex int) bool {
+	p.Lock()
+	defer p.Unlock()
+
+	state := p.getState(pIndex)
+	return len(state.blocks[bIndex].peers) != 0
+}
+
 func (p *Picker) IsPieceDone(pIndex int) bool {
 	p.Lock()
 	defer p.Unlock()

@@ -121,6 +121,34 @@ func (p *Peer) SendRequest(index, offset, length int) error {
 	return nil
 }
 
+func (p *Peer) SendCancel(index, offset, length int) error {
+	req := message.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
+	fmt.Printf("%s WRITE CANCEL: %d %d %d\n", p.conn.RemoteAddr().String(), index, offset, length)
+	payload := message.NewRequestPayload(req)
+
+	_, err := p.WriteMsg(message.IDCancel, payload)
+	if err != nil {
+		return err
+	}
+
+	for i, req := range p.Requests {
+		if req[0] != index {
+			continue
+		}
+		if req[1]*DefaultBlockSize != offset {
+			continue
+		}
+		if req[2] != length {
+			continue
+		}
+
+		p.Requests = append(p.Requests[:i], p.Requests[i+1:]...)
+		break
+	}
+
+	return nil
+}
+
 func (p *Peer) IsRequestable() bool {
 	return len(p.Requests) < MaxRequestCountPerPeer && p.IsInteresting
 }
