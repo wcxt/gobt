@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand"
 	"sync"
+	"time"
 
 	"github.com/edwces/gobt/bitfield"
 	"golang.org/x/exp/slices"
@@ -56,6 +57,7 @@ type Picker struct {
 
 	states  map[int]*Piece
 	ordered []int
+	rand    *rand.Rand
 
 	sync.Mutex
 }
@@ -69,7 +71,13 @@ func NewPicker(tSize, pMaxSize int) *Picker {
 		ordered[i] = i
 	}
 
-	return &Picker{tSize: tSize, pMaxSize: pMaxSize, ordered: ordered, states: map[int]*Piece{}}
+	rand := rand.New(rand.NewSource(time.Now().Unix()))
+
+	return &Picker{tSize: tSize, pMaxSize: pMaxSize, ordered: ordered, states: map[int]*Piece{}, rand: rand}
+}
+
+func (p *Picker) SetRandSeed(seed int64) {
+	p.rand.Seed(seed)
 }
 
 // Pick gets a new block from pieces that are available in bitfield.
@@ -261,7 +269,7 @@ func (p *Picker) pickBlockEndgame(pIndex int, peer string) (int, error) {
 func (p *Picker) pickRandomPiece(have bitfield.Bitfield, reqBoundary int) (int, error) {
 	ordCopy := make([]int, len(p.ordered)-reqBoundary)
 	copy(ordCopy, p.ordered[reqBoundary:])
-	rand.Shuffle(len(ordCopy), func(i, j int) {
+	p.rand.Shuffle(len(ordCopy), func(i, j int) {
 		ordCopy[i], ordCopy[j] = ordCopy[j], ordCopy[i]
 	})
 
