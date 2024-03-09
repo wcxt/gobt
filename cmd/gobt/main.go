@@ -138,8 +138,8 @@ func main() {
 						return
 					}
 
-					pp.MarkBlockDone(int(block.Index), int(block.Offset)/gobt.DefaultBlockSize, peer.String())
-					if pp.IsBlockResolving(int(block.Index), int(block.Offset)/gobt.DefaultBlockSize) {
+					pp.MarkBlockDone(int(block.Index), int(block.Offset)/gobt.MaxBlockLength, peer.String())
+					if pp.IsBlockPending(int(block.Index), int(block.Offset)/gobt.MaxBlockLength) {
 						connected.WriteCancel(int(block.Index), int(block.Offset), len(block.Block), peer.String())
 					}
 
@@ -182,8 +182,8 @@ func main() {
 							break
 						}
 
-						length := int(math.Min(float64(gobt.DefaultBlockSize), float64(metainfo.Info.PieceLength)-float64(cb*gobt.DefaultBlockSize)))
-						err = peer.SendRequest(cp, cb*gobt.DefaultBlockSize, length)
+						length := int(math.Min(float64(gobt.MaxBlockLength), float64(metainfo.Info.PieceLength)-float64(cb*gobt.MaxBlockLength)))
+						err = peer.SendRequest(cp, cb*gobt.MaxBlockLength, length)
 						if err != nil {
 							fmt.Println(err)
 							return
@@ -219,8 +219,8 @@ func main() {
 							unresolved = unresolved[1:]
 						}
 
-						length := int(math.Min(float64(gobt.DefaultBlockSize), float64(metainfo.Info.PieceLength)-float64(cb*gobt.DefaultBlockSize)))
-						err = peer.SendRequest(cp, cb*gobt.DefaultBlockSize, length)
+						length := int(math.Min(float64(gobt.MaxBlockLength), float64(metainfo.Info.PieceLength)-float64(cb*gobt.MaxBlockLength)))
+						err = peer.SendRequest(cp, cb*gobt.MaxBlockLength, length)
 						if err != nil {
 							fmt.Println(err)
 							return

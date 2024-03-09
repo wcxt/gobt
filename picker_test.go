@@ -10,7 +10,7 @@ import (
 const (
 	TestTorrentPieceBlocks = 4
 	TestTorrentTotalPieces = 25
-	TestTorrentPieceLength = gobt.DefaultBlockSize*TestTorrentPieceBlocks - gobt.DefaultBlockSize/2
+	TestTorrentPieceLength = gobt.MaxBlockLength*TestTorrentPieceBlocks - gobt.MaxBlockLength/2
 	TestTorrentLength      = TestTorrentPieceLength * TestTorrentTotalPieces
 )
 

@@ -23,7 +23,7 @@ type Storage struct {
 }
 
 func NewStorage(tSize, pMaxSize int) *Storage {
-	size := PieceCount(tSize, pMaxSize)
+	size := CalcPieceLength(tSize, pMaxSize)
 	return &Storage{bufs: make([][]byte, size), tSize: tSize, pMaxSize: pMaxSize}
 }
 

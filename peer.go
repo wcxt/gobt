@@ -96,7 +96,7 @@ func (p *Peer) RecvRequest(index, offset, length int) error {
 	if req[0] != index {
 		return errors.New("invalid index")
 	}
-	if req[1]*DefaultBlockSize != offset {
+	if req[1]*MaxBlockLength != offset {
 		return errors.New("invalid offset")
 	}
 	if req[2] != length {
@@ -112,7 +112,7 @@ func (p *Peer) SendRequest(index, offset, length int) error {
 	fmt.Printf("%s WRITE REQUEST: %d %d %d\n", p.conn.RemoteAddr().String(), index, offset, length)
 	payload := message.NewRequestPayload(req)
 
-	p.Requests = append(p.Requests, []int{index, offset / DefaultBlockSize, length})
+	p.Requests = append(p.Requests, []int{index, offset / MaxBlockLength, length})
 	_, err := p.WriteMsg(message.IDRequest, payload)
 	if err != nil {
 		return err
@@ -135,7 +135,7 @@ func (p *Peer) SendCancel(index, offset, length int) error {
 		if req[0] != index {
 			continue
 		}
-		if req[1]*DefaultBlockSize != offset {
+		if req[1]*MaxBlockLength != offset {
 			continue
 		}
 		if req[2] != length {

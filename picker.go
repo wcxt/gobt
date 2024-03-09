@@ -16,25 +16,25 @@ type BlockStatus int
 
 const (
 	PieceInQueue PieceStatus = iota
-	PieceRequesting
-	PieceResolving
+	PieceInProgress
+	PiecePending
 	PieceDone
 
 	BlockInQueue BlockStatus = iota
-	BlockResolving
+	BlockPending
 	BlockDone
 
-	DefaultBlockSize      = 16000
+	MaxBlockLength        = 16000
 	RandomPieceEndCounter = 5
 )
 
-func PieceCount(tSize, pMaxSize int) int {
+func CalcPieceLength(tSize, pMaxSize int) int {
 	return int(math.Ceil((float64(tSize) / float64(pMaxSize))))
 }
 
-func BlockCount(tSize, pMaxSize, pIndex int) int {
+func CalcBlockLength(tSize, pMaxSize, pIndex int) int {
 	pSize := math.Min(float64(pMaxSize), float64(tSize)-float64(pMaxSize)*float64(pIndex))
-	return int(math.Ceil((float64(pSize) / float64(DefaultBlockSize))))
+	return int(math.Ceil((float64(pSize) / float64(MaxBlockLength))))
 }
 
 type Block struct {
@@ -51,11 +51,11 @@ type Piece struct {
 }
 
 type Picker struct {
-	pCounter int
-	tSize    int
-	pMaxSize int
+	counter        int
+	length         int
+	maxPieceLength int
 
-	states  map[int]*Piece
+	pieces  map[int]*Piece
 	ordered []int
 	rand    *rand.Rand
 
@@ -63,17 +63,17 @@ type Picker struct {
 }
 
 // NewPicker creates picker with pieces to pick from.
-func NewPicker(tSize, pMaxSize int) *Picker {
-	count := PieceCount(tSize, pMaxSize)
+func NewPicker(length, maxPieceLength int) *Picker {
+	rand := rand.New(rand.NewSource(time.Now().Unix()))
+
+	count := CalcPieceLength(length, maxPieceLength)
 	ordered := make([]int, count)
 
 	for i := 0; i < count; i++ {
 		ordered[i] = i
 	}
 
-	rand := rand.New(rand.NewSource(time.Now().Unix()))
-
-	return &Picker{tSize: tSize, pMaxSize: pMaxSize, ordered: ordered, states: map[int]*Piece{}, rand: rand}
+	return &Picker{length: length, maxPieceLength: maxPieceLength, ordered: ordered, pieces: map[int]*Piece{}, rand: rand}
 }
 
 func (p *Picker) SetRandSeed(seed int64) {
@@ -89,25 +89,29 @@ func (p *Picker) Pick(have bitfield.Bitfield, peer string) (int, int, error) {
 		return p.pickEndgame(have, peer)
 	}
 
-	pIndex, error := p.pickPiece(have)
+	pi, err := p.pickPiece(have)
 
-	if error != nil {
-		return 0, 0, error
+	if err != nil {
+		return 0, 0, err
 	}
 
-	bIndex := p.pickBlock(pIndex, peer)
+	bi := p.pickBlock(pi, peer)
 
-	return pIndex, bIndex, nil
+	return pi, bi, nil
 }
 
-func (p *Picker) IncrementPieceAvailability(pIndex int) {
+//func (p *Picker) pickRandom(have bitfield.Bitfield, peer string) (int, int, error) {
+//
+//}
+
+func (p *Picker) IncrementPieceAvailability(pi int) {
 	p.Lock()
 	defer p.Unlock()
 
-	state := p.getState(pIndex)
-	state.availability++
+	piece := p.getPiece(pi)
+	piece.availability++
 
-	p.orderPieces()
+	p.update()
 }
 
 func (p *Picker) DecrementAvailability(have bitfield.Bitfield) {
@@ -115,17 +119,17 @@ func (p *Picker) DecrementAvailability(have bitfield.Bitfield) {
 	defer p.Unlock()
 
 	// TEMP Workaround, Should probably use some built-in func in bitfield
-	count := PieceCount(p.tSize, p.pMaxSize)
+	count := CalcPieceLength(p.length, p.maxPieceLength)
 	temp := make([]int, count)
 
 	for i := range temp {
 		if has, _ := have.Get(i); has {
-			state := p.getState(i)
-			state.availability--
+			piece := p.getPiece(i)
+			piece.availability--
 		}
 	}
 
-	p.orderPieces()
+	p.update()
 }
 
 func (p *Picker) IncrementAvailability(have bitfield.Bitfield) {
@@ -133,80 +137,76 @@ func (p *Picker) IncrementAvailability(have bitfield.Bitfield) {
 	defer p.Unlock()
 
 	//  TEMP Workaround, Should probably use some built-in func in bitfield
-	count := PieceCount(p.tSize, p.pMaxSize)
+	count := CalcPieceLength(p.length, p.maxPieceLength)
 	temp := make([]int, count)
 
 	for i := range temp {
 		if has, _ := have.Get(i); has {
-			state := p.getState(i)
-			state.availability++
+			piece := p.getPiece(i)
+			piece.availability++
 		}
 	}
 
-	p.orderPieces()
+	p.update()
 }
 
-func (p *Picker) MarkBlockDone(pIndex int, bIndex int, peer string) {
+func (p *Picker) MarkBlockDone(pi int, bi int, peer string) {
 	p.Lock()
 	defer p.Unlock()
 
-	state := p.getState(pIndex)
-	state.blocks[bIndex].status = BlockDone
-	state.blocks[bIndex].peers = slices.DeleteFunc(state.blocks[bIndex].peers, func(e string) bool { return e == peer })
+	piece := p.getPiece(pi)
+	piece.blocks[bi].status = BlockDone
+	piece.blocks[bi].peers = slices.DeleteFunc(piece.blocks[bi].peers, func(e string) bool { return e == peer })
 
-	for _, block := range state.blocks {
+	for _, block := range piece.blocks {
 		if block.status != BlockDone {
 			return
 		}
 	}
 
-	state.status = PieceDone
+	piece.status = PieceDone
 
 }
 
-func (p *Picker) IsBlockResolving(pIndex int, bIndex int) bool {
+func (p *Picker) IsBlockPending(pi int, bi int) bool {
 	p.Lock()
 	defer p.Unlock()
 
-	state := p.getState(pIndex)
-	return len(state.blocks[bIndex].peers) != 0
+	piece := p.getPiece(pi)
+	return len(piece.blocks[bi].peers) != 0
 }
 
-func (p *Picker) IsPieceDone(pIndex int) bool {
+func (p *Picker) IsPieceDone(pi int) bool {
 	p.Lock()
 	defer p.Unlock()
 
-	state := p.getState(pIndex)
-	return state.status == PieceDone
+	piece := p.getPiece(pi)
+	return piece.status == PieceDone
 }
 
-// MarkPieceInQueue clears piece state and readds it to the picker
-// NOTE: This method is unoptimized as it may cause loop where
-//
-//	the same peer/peers is constantly corrupting piece
-func (p *Picker) MarkPieceInQueue(pIndex int) {
+func (p *Picker) MarkPieceInQueue(pi int) {
 	p.Lock()
 	defer p.Unlock()
 
-	p.states[pIndex] = p.createState(pIndex)
+	p.pieces[pi] = p.newPiece(pi)
 
-	p.ordered = append(p.ordered, pIndex)
-	p.orderPieces()
+	p.ordered = append(p.ordered, pi)
+	p.update()
 }
 
 // MarkBlockInQueue adds block to requests and optionally puts incomplete piece onto the top of picker
-func (p *Picker) MarkBlockInQueue(pIndex int, bIndex int, peer string) {
+func (p *Picker) MarkBlockInQueue(pi int, bi int, peer string) {
 	p.Lock()
 	defer p.Unlock()
 
-	state := p.getState(pIndex)
-	state.blocks[bIndex].status = BlockInQueue
-	state.blocks[bIndex].peers = slices.DeleteFunc(state.blocks[bIndex].peers, func(e string) bool { return e == peer })
+	piece := p.getPiece(pi)
+	piece.blocks[bi].status = BlockInQueue
+	piece.blocks[bi].peers = slices.DeleteFunc(piece.blocks[bi].peers, func(e string) bool { return e == peer })
 
-	if state.status == PieceResolving {
-		state.status = PieceRequesting
-		p.ordered = append(p.ordered, pIndex)
-		p.orderPieces()
+	if piece.status == PiecePending {
+		piece.status = PieceInProgress
+		p.ordered = append(p.ordered, pi)
+		p.update()
 	}
 }
 
@@ -214,19 +214,19 @@ func (p *Picker) MarkBlockInQueue(pIndex int, bIndex int, peer string) {
 func (p *Picker) pickPiece(have bitfield.Bitfield) (int, error) {
 	reqBoundary := 0
 	for i, val := range p.ordered {
-		state := p.getState(val)
+		piece := p.getPiece(val)
 
-		if state.status == PieceInQueue {
+		if piece.status == PieceInQueue {
 			reqBoundary = i
 			break
 		}
 
-		if have, _ := have.Get(val); have {
+		if has, _ := have.Get(val); has {
 			return val, nil
 		}
 	}
 
-	if p.pCounter < RandomPieceEndCounter {
+	if p.counter < RandomPieceEndCounter {
 		return p.pickRandomPiece(have, reqBoundary)
 	}
 
@@ -234,32 +234,32 @@ func (p *Picker) pickPiece(have bitfield.Bitfield) (int, error) {
 }
 
 func (p *Picker) pickEndgame(have bitfield.Bitfield, peer string) (int, int, error) {
-	for pIndex, state := range p.states {
-		if state.status == PieceResolving {
-			has, _ := have.Get(pIndex)
+	for pi, piece := range p.pieces {
+		if piece.status == PiecePending {
+			has, _ := have.Get(pi)
 			if !has {
 				continue
 			}
 
-			bIndex, err := p.pickBlockEndgame(pIndex, peer)
+			bi, err := p.pickBlockEndgame(pi, peer)
 			if err != nil {
 				continue
 			}
 
-			state.blocks[bIndex].peers = append(state.blocks[bIndex].peers, peer)
-			return pIndex, bIndex, nil
+			piece.blocks[bi].peers = append(piece.blocks[bi].peers, peer)
+			return pi, bi, nil
 		}
 	}
 
 	return 0, 0, errors.New("No piece found")
 }
 
-func (p *Picker) pickBlockEndgame(pIndex int, peer string) (int, error) {
-	state := p.getState(pIndex)
+func (p *Picker) pickBlockEndgame(pi int, peer string) (int, error) {
+	piece := p.getPiece(pi)
 
-	for bIndex, block := range state.blocks {
-		if block.status == BlockResolving && !slices.Contains(block.peers, peer) {
-			return bIndex, nil
+	for bi, block := range piece.blocks {
+		if block.status == BlockPending && !slices.Contains(block.peers, peer) {
+			return bi, nil
 		}
 	}
 
@@ -274,7 +274,7 @@ func (p *Picker) pickRandomPiece(have bitfield.Bitfield, reqBoundary int) (int, 
 	})
 
 	for _, val := range ordCopy {
-		if have, _ := have.Get(val); have {
+		if has, _ := have.Get(val); has {
 			return val, nil
 		}
 	}
@@ -284,7 +284,7 @@ func (p *Picker) pickRandomPiece(have bitfield.Bitfield, reqBoundary int) (int, 
 
 func (p *Picker) pickRarestPiece(have bitfield.Bitfield, reqBoundary int) (int, error) {
 	for _, val := range p.ordered[reqBoundary:] {
-		if have, _ := have.Get(val); have {
+		if has, _ := have.Get(val); has {
 			return val, nil
 		}
 	}
@@ -293,9 +293,9 @@ func (p *Picker) pickRarestPiece(have bitfield.Bitfield, reqBoundary int) (int, 
 }
 
 // removePiece returns true if succesfully removes piece from picker
-func (p *Picker) removePiece(pIndex int) bool {
+func (p *Picker) removePiece(pi int) bool {
 	for i, val := range p.ordered {
-		if pIndex == val {
+		if pi == val {
 			p.ordered = append(p.ordered[:i], p.ordered[i+1:]...)
 			return true
 		}
@@ -304,60 +304,60 @@ func (p *Picker) removePiece(pIndex int) bool {
 }
 
 // pickBlock returns block index and removes piece from picker if all blocks have been requested
-func (p *Picker) pickBlock(pIndex int, peer string) int {
-	state := p.getState(pIndex)
+func (p *Picker) pickBlock(pi int, peer string) int {
+	piece := p.getPiece(pi)
 	var bIndex int
 
-	for bi, block := range state.blocks {
+	for bi, block := range piece.blocks {
 		if block.status == BlockInQueue {
 			bIndex = bi
-			block.status = BlockResolving
+			block.status = BlockPending
 			block.peers = append(block.peers, peer)
 			break
 		}
 	}
 
 	// TEMP:
-	isPieceResolving := true
+	isPiecePending := true
 
-	for _, block := range state.blocks {
+	for _, block := range piece.blocks {
 		if block.status == BlockInQueue {
-			isPieceResolving = false
+			isPiecePending = false
 			break
 		}
 	}
 
-	if isPieceResolving {
-		p.removePiece(pIndex)
-		state.status = PieceResolving
+	if isPiecePending {
+		p.removePiece(pi)
+		piece.status = PiecePending
 		return bIndex
 	}
 
-	if state.status == PieceInQueue {
-		state.status = PieceRequesting
-		p.pCounter++
-		p.orderPieces()
+	if piece.status == PieceInQueue {
+		piece.status = PieceInProgress
+		p.counter++
+		p.update()
 	}
 
 	return bIndex
 }
 
 // Returns piece state or creates one if it doesn't exists
-func (p *Picker) getState(pIndex int) *Piece {
-	state, exists := p.states[pIndex]
+func (p *Picker) getPiece(pi int) *Piece {
+	piece, exists := p.pieces[pi]
 
 	if !exists {
-		state = p.createState(pIndex)
-		p.states[pIndex] = state
+		piece = p.newPiece(pi)
+		p.pieces[pi] = piece
 	}
 
-	return state
+	return piece
 }
 
-func (p *Picker) createState(pIndex int) *Piece {
-	bCount := BlockCount(p.tSize, p.pMaxSize, pIndex)
-	blocks := make([]*Block, bCount)
-	for i := 0; i < bCount; i++ {
+func (p *Picker) newPiece(pIndex int) *Piece {
+	count := CalcBlockLength(p.length, p.maxPieceLength, pIndex)
+	blocks := make([]*Block, count)
+	for i := 0; i < count; i++ {
 		block := &Block{status: BlockInQueue}
 		blocks[i] = block
 	}
@@ -365,20 +365,20 @@ func (p *Picker) createState(pIndex int) *Piece {
 	return &Piece{blocks: blocks, status: PieceInQueue}
 }
 
-func (p *Picker) orderPieces() {
+func (p *Picker) update() {
 	slices.SortFunc(p.ordered, func(a, b int) int {
-		aState := p.getState(a)
-		bState := p.getState(b)
+		piece1 := p.getPiece(a)
+		piece2 := p.getPiece(b)
 
-		if aState.status == PieceRequesting && bState.status == PieceInQueue {
+		if piece1.status == PieceInProgress && piece2.status == PieceInQueue {
 			return -1
-		} else if bState.status == PieceRequesting && aState.status == PieceInQueue {
+		} else if piece2.status == PieceInProgress && piece1.status == PieceInQueue {
 			return 1
-		} else if aState.status == bState.status {
+		} else if piece1.status == piece2.status {
 			// Sort based on availability
-			if aState.availability < bState.availability {
+			if piece1.availability < piece2.availability {
 				return -1
-			} else if bState.availability < aState.availability {
+			} else if piece2.availability < piece1.availability {
 				return 1
 			} else {
 				return 0
