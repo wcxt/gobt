@@ -156,22 +156,19 @@ func (p *Picker) MarkBlockDone(pi int, bi int, peer string) {
 	piece.blocks[bi].status = BlockDone
 	piece.blocks[bi].peers = slices.DeleteFunc(piece.blocks[bi].peers, func(e string) bool { return e == peer })
 
+	if p.isPieceDone(piece) {
+		piece.status = PieceDone
+	}
+}
+
+func (p *Picker) isPieceDone(piece *Piece) bool {
 	for _, block := range piece.blocks {
 		if block.status != BlockDone {
-			return
+			return false
 		}
 	}
 
-	piece.status = PieceDone
-
-}
-
-func (p *Picker) IsBlockPending(pi int, bi int) bool {
-	p.Lock()
-	defer p.Unlock()
-
-	piece := p.getPiece(pi)
-	return len(piece.blocks[bi].peers) != 0
+	return true
 }
 
 func (p *Picker) IsPieceDone(pi int) bool {
@@ -180,6 +177,14 @@ func (p *Picker) IsPieceDone(pi int) bool {
 
 	piece := p.getPiece(pi)
 	return piece.status == PieceDone
+}
+
+func (p *Picker) IsBlockDownloaded(pi int, bi int) bool {
+	p.Lock()
+	defer p.Unlock()
+
+	piece := p.getPiece(pi)
+	return len(piece.blocks[bi].peers) != 0
 }
 
 func (p *Picker) MarkPieceInQueue(pi int) {
