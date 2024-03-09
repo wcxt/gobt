@@ -118,16 +118,15 @@ func (p *Picker) DecrementAvailability(have bitfield.Bitfield) {
 	p.Lock()
 	defer p.Unlock()
 
-	// TEMP Workaround, Should probably use some built-in func in bitfield
-	count := CalcPieceLength(p.length, p.maxPieceLength)
-	temp := make([]int, count)
-
-	for i := range temp {
-		if has, _ := have.Get(i); has {
-			piece := p.getPiece(i)
-			piece.availability--
+	have.Range(func(i int, val bool) bool {
+		if !val {
+			return true
 		}
-	}
+
+		piece := p.getPiece(i)
+		piece.availability--
+		return true
+	})
 
 	p.update()
 }
@@ -136,16 +135,15 @@ func (p *Picker) IncrementAvailability(have bitfield.Bitfield) {
 	p.Lock()
 	defer p.Unlock()
 
-	//  TEMP Workaround, Should probably use some built-in func in bitfield
-	count := CalcPieceLength(p.length, p.maxPieceLength)
-	temp := make([]int, count)
-
-	for i := range temp {
-		if has, _ := have.Get(i); has {
-			piece := p.getPiece(i)
-			piece.availability++
+	have.Range(func(i int, val bool) bool {
+		if !val {
+			return true
 		}
-	}
+
+		piece := p.getPiece(i)
+		piece.availability++
+		return true
+	})
 
 	p.update()
 }

@@ -18,6 +18,7 @@ type Bitfield interface {
 	Get(int) (bool, error)
 	Empty() bool
 	Full() bool
+	Range(func(i int, val bool) bool)
 	Difference(Bitfield) (Bitfield, error)
 }
 
@@ -124,4 +125,18 @@ func (bf *bitfield) Difference(x Bitfield) (Bitfield, error) {
 	}
 
 	return inter, nil
+}
+
+func (bf *bitfield) Range(fn func(i int, val bool) bool) {
+	for i, set := range bf.field {
+		for offset := 0; offset < 8; offset++ {
+			bit := set & (0b10000000 >> offset)
+			val := bit != 0
+			ret := fn(i*8+offset, val)
+
+			if !ret {
+				return
+			}
+		}
+	}
 }
