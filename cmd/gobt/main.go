@@ -104,7 +104,7 @@ func main() {
 
 			defer func() {
 				for _, req := range peer.Requests {
-					pp.MarkBlockInQueue(req[0], req[1], peer.String())
+					pp.FailPendingBlock(req[0], req[1], peer.String())
 				}
 				pp.DecrementAvailability(bf)
 				connected.Remove(peer)
@@ -139,7 +139,7 @@ func main() {
 					}
 
 					pp.MarkBlockDone(int(block.Index), int(block.Offset)/gobt.MaxBlockLength, peer.String())
-					if pp.IsBlockPending(int(block.Index), int(block.Offset)/gobt.MaxBlockLength) {
+					if pp.IsBlockDownloaded(int(block.Index), int(block.Offset)/gobt.MaxBlockLength) {
 						connected.WriteCancel(int(block.Index), int(block.Offset), len(block.Block), peer.String())
 					}
 
@@ -160,7 +160,7 @@ func main() {
 							}
 						} else {
 							fmt.Printf("-------------------------------------------------- %s GOT FAILED: %d; \n", announcePeer.Addr(), block.Index)
-							pp.MarkPieceInQueue(int(block.Index))
+							pp.FailPendingPiece(int(block.Index))
 							peer.HashFails += 1
 							if peer.HashFails >= gobt.MaxHashFails {
 								fmt.Println("Excedded Maximum hash fails: 5")

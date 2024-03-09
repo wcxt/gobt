@@ -100,10 +100,6 @@ func (p *Picker) Pick(have bitfield.Bitfield, peer string) (int, int, error) {
 	return pi, bi, nil
 }
 
-//func (p *Picker) pickRandom(have bitfield.Bitfield, peer string) (int, int, error) {
-//
-//}
-
 func (p *Picker) IncrementPieceAvailability(pi int) {
 	p.Lock()
 	defer p.Unlock()
@@ -187,18 +183,19 @@ func (p *Picker) IsBlockDownloaded(pi int, bi int) bool {
 	return len(piece.blocks[bi].peers) != 0
 }
 
-func (p *Picker) MarkPieceInQueue(pi int) {
+func (p *Picker) FailPendingPiece(pi int) {
 	p.Lock()
 	defer p.Unlock()
 
-	p.pieces[pi] = p.newPiece(pi)
+	piece := p.getPiece(pi)
+	piece.status = PieceInQueue
+	piece.blocks = p.newBlocksForPiece(pi)
 
 	p.ordered = append(p.ordered, pi)
 	p.update()
 }
 
-// MarkBlockInQueue adds block to requests and optionally puts incomplete piece onto the top of picker
-func (p *Picker) MarkBlockInQueue(pi int, bi int, peer string) {
+func (p *Picker) FailPendingBlock(pi int, bi int, peer string) {
 	p.Lock()
 	defer p.Unlock()
 
@@ -350,22 +347,23 @@ func (p *Picker) getPiece(pi int) *Piece {
 	piece, exists := p.pieces[pi]
 
 	if !exists {
-		piece = p.newPiece(pi)
+		blocks := p.newBlocksForPiece(pi)
+		piece = &Piece{status: PieceInQueue, blocks: blocks}
 		p.pieces[pi] = piece
 	}
 
 	return piece
 }
 
-func (p *Picker) newPiece(pIndex int) *Piece {
-	count := CalcBlockLength(p.length, p.maxPieceLength, pIndex)
+func (p *Picker) newBlocksForPiece(pi int) []*Block {
+	count := CalcBlockLength(p.length, p.maxPieceLength, pi)
 	blocks := make([]*Block, count)
 	for i := 0; i < count; i++ {
 		block := &Block{status: BlockInQueue}
 		blocks[i] = block
 	}
 
-	return &Piece{blocks: blocks, status: PieceInQueue}
+	return blocks
 }
 
 func (p *Picker) update() {
