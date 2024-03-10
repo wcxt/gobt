@@ -313,12 +313,11 @@ func (p *Picker) removePiece(pi int) bool {
 func (p *Picker) pickEndgame(have bitfield.Bitfield, peer string) (int, int, error) {
 	for pi, piece := range p.pieces {
 		if piece.status == PiecePending {
-			has, _ := have.Get(pi)
-			if !has {
+			if has, _ := have.Get(pi); !has {
 				continue
 			}
 
-			bi, err := p.pickBlockEndgame(pi, peer)
+			bi, err := p.pickPendingBlock(piece, pi, peer)
 			if err != nil {
 				continue
 			}
@@ -331,9 +330,7 @@ func (p *Picker) pickEndgame(have bitfield.Bitfield, peer string) (int, int, err
 	return 0, 0, errors.New("No piece found")
 }
 
-func (p *Picker) pickBlockEndgame(pi int, peer string) (int, error) {
-	piece := p.getPiece(pi)
-
+func (p *Picker) pickPendingBlock(piece *Piece, pi int, peer string) (int, error) {
 	for bi, block := range piece.blocks {
 		if block.status == BlockPending && !slices.Contains(block.peers, peer) {
 			return bi, nil
