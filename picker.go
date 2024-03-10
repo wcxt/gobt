@@ -28,11 +28,11 @@ const (
 	RandomPieceEndCounter = 5
 )
 
-func CalcPieceLength(tSize, pMaxSize int) int {
+func CalcPieceCount(tSize, pMaxSize int) int {
 	return int(math.Ceil((float64(tSize) / float64(pMaxSize))))
 }
 
-func CalcBlockLength(tSize, pMaxSize, pIndex int) int {
+func CalcBlockCount(tSize, pMaxSize, pIndex int) int {
 	pSize := math.Min(float64(pMaxSize), float64(tSize)-float64(pMaxSize)*float64(pIndex))
 	return int(math.Ceil((float64(pSize) / float64(MaxBlockLength))))
 }
@@ -66,7 +66,7 @@ type Picker struct {
 func NewPicker(length, maxPieceLength int) *Picker {
 	rand := rand.New(rand.NewSource(time.Now().Unix()))
 
-	count := CalcPieceLength(length, maxPieceLength)
+	count := CalcPieceCount(length, maxPieceLength)
 	ordered := make([]int, count)
 
 	for i := 0; i < count; i++ {
@@ -95,7 +95,8 @@ func (p *Picker) Pick(have bitfield.Bitfield, peer string) (int, int, error) {
 		return 0, 0, err
 	}
 
-	bi := p.pickBlock(pi, peer)
+	piece := p.getPiece(pi)
+	bi := p.pickNextBlock(piece, pi, peer)
 
 	return pi, bi, nil
 }
@@ -233,6 +234,50 @@ func (p *Picker) pickPiece(have bitfield.Bitfield) (int, error) {
 	return p.pickRarestPiece(have, reqBoundary)
 }
 
+func (p *Picker) pickNextBlock(piece *Piece, pi int, peer string) int {
+	for bi, block := range piece.blocks {
+		if block.status != BlockInQueue {
+			continue
+		}
+
+		block.status = BlockPending
+		block.peers = append(block.peers, peer)
+
+		if piece.status == PieceInQueue {
+			piece.status = PieceInProgress
+			p.counter++
+			p.update()
+		} else if p.isPiecePending(piece) {
+			piece.status = PiecePending
+			p.removePiece(pi)
+		}
+
+		return bi
+	}
+
+	return -1
+}
+
+func (p *Picker) isPiecePending(piece *Piece) bool {
+	for _, block := range piece.blocks {
+		if block.status == BlockInQueue {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (p *Picker) removePiece(pi int) bool {
+	for i, val := range p.ordered {
+		if pi == val {
+			p.ordered = append(p.ordered[:i], p.ordered[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
 func (p *Picker) pickEndgame(have bitfield.Bitfield, peer string) (int, int, error) {
 	for pi, piece := range p.pieces {
 		if piece.status == PiecePending {
@@ -292,56 +337,6 @@ func (p *Picker) pickRarestPiece(have bitfield.Bitfield, reqBoundary int) (int, 
 	return 0, errors.New("No piece found")
 }
 
-// removePiece returns true if succesfully removes piece from picker
-func (p *Picker) removePiece(pi int) bool {
-	for i, val := range p.ordered {
-		if pi == val {
-			p.ordered = append(p.ordered[:i], p.ordered[i+1:]...)
-			return true
-		}
-	}
-	return false
-}
-
-// pickBlock returns block index and removes piece from picker if all blocks have been requested
-func (p *Picker) pickBlock(pi int, peer string) int {
-	piece := p.getPiece(pi)
-	var bIndex int
-
-	for bi, block := range piece.blocks {
-		if block.status == BlockInQueue {
-			bIndex = bi
-			block.status = BlockPending
-			block.peers = append(block.peers, peer)
-			break
-		}
-	}
-
-	// TEMP:
-	isPiecePending := true
-
-	for _, block := range piece.blocks {
-		if block.status == BlockInQueue {
-			isPiecePending = false
-			break
-		}
-	}
-
-	if isPiecePending {
-		p.removePiece(pi)
-		piece.status = PiecePending
-		return bIndex
-	}
-
-	if piece.status == PieceInQueue {
-		piece.status = PieceInProgress
-		p.counter++
-		p.update()
-	}
-
-	return bIndex
-}
-
 // Returns piece state or creates one if it doesn't exists
 func (p *Picker) getPiece(pi int) *Piece {
 	piece, exists := p.pieces[pi]
@@ -356,7 +351,7 @@ func (p *Picker) getPiece(pi int) *Piece {
 }
 
 func (p *Picker) newBlocksForPiece(pi int) []*Block {
-	count := CalcBlockLength(p.length, p.maxPieceLength, pi)
+	count := CalcBlockCount(p.length, p.maxPieceLength, pi)
 	blocks := make([]*Block, count)
 	for i := 0; i < count; i++ {
 		block := &Block{status: BlockInQueue}
