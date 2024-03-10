@@ -26,6 +26,7 @@ type Peer struct {
 	IsChoking     bool
 
 	Requests  [][]int
+	Cancelled [][]int
 	HashFails int
 
 	writeKeepAlivePeriod time.Duration
@@ -33,7 +34,7 @@ type Peer struct {
 }
 
 func NewPeer(conn net.Conn) *Peer {
-	return &Peer{conn: conn, IsInteresting: false, IsChoking: true, Requests: [][]int{}, HashFails: 0}
+	return &Peer{conn: conn, IsInteresting: false, IsChoking: true, Requests: [][]int{}, Cancelled: [][]int{}, HashFails: 0}
 }
 
 func (p *Peer) Handshake(hash, clientID [20]byte) error {
@@ -103,6 +104,14 @@ func (p *Peer) RecvRequest(index, offset, length int) error {
 		return errors.New("invalid length")
 	}
 
+	// TEMP: Fix for cancelled requests, BUT we still process them in our client
+	if len(p.Cancelled) != 0 {
+		if p.Cancelled[0][0] != req[0] && p.Cancelled[0][1] != req[1] && p.Cancelled[0][2] != req[2] {
+			p.Requests = p.Requests[1:]
+		}
+		p.Cancelled = p.Cancelled[1:]
+	}
+
 	p.Requests = p.Requests[1:]
 	return nil
 }
@@ -131,7 +140,7 @@ func (p *Peer) SendCancel(index, offset, length int) error {
 		return err
 	}
 
-	for i, req := range p.Requests {
+	for _, req := range p.Requests {
 		if req[0] != index {
 			continue
 		}
@@ -142,7 +151,7 @@ func (p *Peer) SendCancel(index, offset, length int) error {
 			continue
 		}
 
-		p.Requests = append(p.Requests[:i], p.Requests[i+1:]...)
+		p.Cancelled = append(p.Cancelled, req)
 		break
 	}
 
