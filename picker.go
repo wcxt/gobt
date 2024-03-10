@@ -94,16 +94,11 @@ func (p *Picker) Pick(have bitfield.Bitfield, peer string) (int, int, error) {
 		return pi, bi, nil
 	}
 
-	pi, err = p.pickPiece(have)
-
-	if err != nil {
-		return 0, 0, err
+	if p.counter < RandomPieceEndCounter {
+		return p.pickRandom(have, peer)
 	}
 
-	piece := p.getPiece(pi)
-	bi = p.pickNextBlock(piece, pi, peer)
-
-	return pi, bi, nil
+	return p.pickRarest(have, peer)
 }
 
 func (p *Picker) IncrementPieceAvailability(pi int) {
@@ -216,15 +211,6 @@ func (p *Picker) FailPendingBlock(pi int, bi int, peer string) {
 	}
 }
 
-// pickPiece returns and removes piece that is available in peer bitfield from picker ordered pieces.
-func (p *Picker) pickPiece(have bitfield.Bitfield) (int, error) {
-	if p.counter < RandomPieceEndCounter {
-		return p.pickRandomPiece(have)
-	}
-
-	return p.pickRarestPiece(have)
-}
-
 func (p *Picker) pickStrict(have bitfield.Bitfield, peer string) (int, int, error) {
 	for _, pi := range p.ordered {
 		piece := p.getPiece(pi)
@@ -239,6 +225,45 @@ func (p *Picker) pickStrict(have bitfield.Bitfield, peer string) (int, int, erro
 	}
 
 	return 0, 0, errors.New("No pieces found")
+}
+
+func (p *Picker) pickRandom(have bitfield.Bitfield, peer string) (int, int, error) {
+	shuffled := make([]int, len(p.ordered))
+	shuffled = append(shuffled, p.ordered...)
+
+	p.rand.Shuffle(len(shuffled), func(i, j int) {
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	})
+
+	for _, pi := range shuffled {
+		piece := p.getPiece(pi)
+
+		if piece.status != PieceInQueue {
+			continue
+		}
+
+		if has, _ := have.Get(pi); has {
+			return pi, p.pickNextBlock(piece, pi, peer), nil
+		}
+	}
+
+	return 0, 0, errors.New("No piece found")
+}
+
+func (p *Picker) pickRarest(have bitfield.Bitfield, peer string) (int, int, error) {
+	for _, pi := range p.ordered {
+		piece := p.getPiece(pi)
+
+		if piece.status != PieceInQueue {
+			continue
+		}
+
+		if has, _ := have.Get(pi); has {
+			return pi, p.pickNextBlock(piece, pi, peer), nil
+		}
+	}
+
+	return 0, 0, errors.New("No piece found")
 }
 
 func (p *Picker) pickNextBlock(piece *Piece, pi int, peer string) int {
@@ -316,44 +341,6 @@ func (p *Picker) pickBlockEndgame(pi int, peer string) (int, error) {
 	}
 
 	return 0, errors.New("No blocks found")
-}
-
-func (p *Picker) pickRandomPiece(have bitfield.Bitfield) (int, error) {
-	ordCopy := make([]int, len(p.ordered))
-	copy(ordCopy, p.ordered)
-	p.rand.Shuffle(len(ordCopy), func(i, j int) {
-		ordCopy[i], ordCopy[j] = ordCopy[j], ordCopy[i]
-	})
-
-	for _, val := range ordCopy {
-		piece := p.getPiece(val)
-
-		if piece.status != PieceInQueue {
-			continue
-		}
-
-		if has, _ := have.Get(val); has {
-			return val, nil
-		}
-	}
-
-	return 0, errors.New("No piece found")
-}
-
-func (p *Picker) pickRarestPiece(have bitfield.Bitfield) (int, error) {
-	for _, val := range p.ordered {
-		piece := p.getPiece(val)
-
-		if piece.status != PieceInQueue {
-			continue
-		}
-
-		if has, _ := have.Get(val); has {
-			return val, nil
-		}
-	}
-
-	return 0, errors.New("No piece found")
 }
 
 // Returns piece state or creates one if it doesn't exists

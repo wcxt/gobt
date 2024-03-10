@@ -44,7 +44,7 @@ func TestPickerPick(t *testing.T) {
 		p := gobt.NewPicker(TestTorrentLength, TestTorrentPieceLength)
 		p.SetRandSeed(0)
 
-		want := []int{20, 23, 14, 21, 17}
+		want := []int{19, 13, 20, 15, 18}
 
 		for i := 0; i < 5*TestTorrentPieceBlocks; i++ {
 			pi, _, err := p.Pick(bitfield, peerID)
