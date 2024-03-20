@@ -5,24 +5,23 @@ import (
 	"crypto/sha1"
 	"errors"
 	"io"
-	"os"
 
 	bencode "github.com/jackpal/bencode-go"
 )
 
+const HashSize = sha1.Size
+
 type Metainfo struct {
-	Announce string       `bencode:"announce"`
-	Info     MetainfoDict `bencode:"info"`
+	Announce string `bencode:"announce"`
+	Info     struct {
+		Name        string `bencode:"name"`
+		Length      int    `bencode:"length"`
+		PieceLength int    `bencode:"piece length"`
+		Pieces      string `bencode:"pieces"`
+	} `bencode:"info"`
 }
 
-type MetainfoDict struct {
-	Name        string `bencode:"name"`
-	Length      int    `bencode:"length"`
-	PieceLength int    `bencode:"piece length"`
-	Pieces      string `bencode:"pieces"`
-}
-
-func readMetainfo(r io.Reader) (*Metainfo, error) {
+func UnmarshalMetainfo(r io.Reader) (*Metainfo, error) {
 	mi := &Metainfo{}
 	err := bencode.Unmarshal(r, mi)
 	if err != nil {
@@ -32,38 +31,31 @@ func readMetainfo(r io.Reader) (*Metainfo, error) {
 	return mi, nil
 }
 
-func Open(path string) (*Metainfo, error) {
-    file, err := os.Open(path)
-    if err != nil {
-        return nil, err
-    }
-
-    return readMetainfo(file)
-
-}
-
-func (mid MetainfoDict) Hash() ([20]byte, error) {
+func (m Metainfo) InfoHash() ([HashSize]byte, error) {
 	var buf bytes.Buffer
-	err := bencode.Marshal(&buf, mid)
+
+	err := bencode.Marshal(&buf, m.Info)
 	if err != nil {
-		return [20]byte{}, err
+		return [HashSize]byte{}, err
 	}
 
 	return sha1.Sum(buf.Bytes()), nil
 }
 
-func (mid MetainfoDict) Hashes() ([][20]byte, error) {
-	byteStr := []byte(mid.Pieces)
+func (m Metainfo) PieceHashes() ([][HashSize]byte, error) {
+	hashesBytes := []byte(m.Info.Pieces)
 
-	if len(byteStr)%20 != 0 {
-		return [][20]byte{}, errors.New("pieces length not divisable by 20")
+	if len(hashesBytes)%HashSize != 0 {
+		return [][HashSize]byte{}, errors.New("piece hashes length not divisable by hash size")
 	}
-    
-	hashesLen := len(byteStr) / 20
-	hashes := make([][20]byte, hashesLen)
 
-	for i := 0; i < hashesLen; i++ {
-		hashes[i] = [20]byte(byteStr[i*20:i*20+20])
+	hashesCount := len(hashesBytes) / HashSize
+	hashes := make([][HashSize]byte, hashesCount)
+
+	for i := 0; i < hashesCount; i++ {
+		start := i * HashSize
+		end := i*HashSize + HashSize
+		hashes[i] = [HashSize]byte(hashesBytes[start:end])
 	}
 
 	return hashes, nil

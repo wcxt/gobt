@@ -24,12 +24,19 @@ const (
 func main() {
 	path := os.Args[1]
 
-	// Open the metainfo file
-	metainfo, err := gobt.Open(path)
+	// Open file
+	metainfoFile, err := os.Open(path)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
+	metainfo, err := gobt.UnmarshalMetainfo(metainfoFile)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	metainfoFile.Close()
 
 	clientID, err := gobt.GenRandPeerID()
 	if err != nil {
@@ -37,7 +44,7 @@ func main() {
 		return
 	}
 
-	hash, err := metainfo.Info.Hash()
+	hash, err := metainfo.InfoHash()
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -50,7 +57,7 @@ func main() {
 		return
 	}
 
-	hashes, err := metainfo.Info.Hashes()
+	hashes, err := metainfo.PieceHashes()
 	if err != nil {
 		fmt.Println(err)
 		return
