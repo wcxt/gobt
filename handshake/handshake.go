@@ -1,4 +1,4 @@
-package handshake 
+package handshake
 
 import (
 	"bytes"
@@ -6,67 +6,69 @@ import (
 	"io"
 )
 
-const Pstr = "BitTorrent protocol"
+const (
+	HandshakeDefaultPstr = "BitTorrent protocol"
+	HandshakeConstSize   = 49
+)
 
 type Handshake struct {
-    Pstr string
-    Reserved [8]byte
-    InfoHash [20]byte
-    PeerId [20]byte
+	Pstr     string
+	Reserved [8]byte
+	InfoHash [20]byte
+	PeerID   [20]byte
 }
 
-func New(infoHash [20]byte, peerId [20]byte) *Handshake {
-    return &Handshake{
-        Pstr: Pstr,
-        Reserved: [8]byte{0, 0, 0, 0, 0, 0, 0, 0}, 
-        InfoHash: infoHash,
-        PeerId: peerId,
-    }
+func NewHandshake(infoHash [20]byte, peerID [20]byte) *Handshake {
+	return &Handshake{
+		Pstr:     HandshakeDefaultPstr,
+		Reserved: [8]byte{0, 0, 0, 0, 0, 0, 0, 0},
+		InfoHash: infoHash,
+		PeerID:   peerID,
+	}
 }
 
 func (hs *Handshake) PstrLen() uint8 {
-    return uint8(len(hs.Pstr))
+	return uint8(len(hs.Pstr))
 }
 
-func Read(r io.Reader) (*Handshake, error) {
-    buf := make([]byte, 49 + len(Pstr))
-    _, err := io.ReadFull(r, buf)
-    if err != nil {
-        return nil, err
-    }
+func (hs *Handshake) Marshal() []byte {
+	var buf bytes.Buffer
 
-    pstrlen := uint8(buf[0])
-    if pstrlen != uint8(len(Pstr)) {
-        return nil, fmt.Errorf("pstrlen unexpected value: %d", pstrlen)
-    }
+	buf.WriteByte(byte(hs.PstrLen()))
+	buf.WriteString(hs.Pstr)
+	buf.Write(hs.Reserved[:])
+	buf.Write(hs.InfoHash[:])
+	buf.Write(hs.PeerID[:])
 
-    pstr := string(buf[1:pstrlen+1])
-    if pstr != Pstr {
-        return nil, fmt.Errorf("pstr unexpected value: %s", pstr)
-    }
-
-    reserved := [8]byte(buf[pstrlen+1:pstrlen+9])
-    infoHash := [20]byte(buf[pstrlen+9:pstrlen+29])
-    peerId := [20]byte(buf[pstrlen+29:pstrlen+49])
-
-    return &Handshake{
-        Pstr: pstr,
-        Reserved: reserved,
-        InfoHash: infoHash,
-        PeerId: peerId,
-    }, nil
+	return buf.Bytes()
 }
 
-func Write(w io.Writer, hs *Handshake) (int, error) {
-    var buf bytes.Buffer
+func UnmarshalHandshake(r io.Reader) (*Handshake, error) {
+	buf := make([]byte, HandshakeConstSize+len(HandshakeDefaultPstr))
 
-    buf.WriteByte(byte(hs.PstrLen()))
-    buf.WriteString(hs.Pstr)
-    buf.Write(hs.Reserved[:])
-    buf.Write(hs.InfoHash[:])
-    buf.Write(hs.PeerId[:])
-    
-    return w.Write(buf.Bytes())
+	_, err := io.ReadFull(r, buf)
+	if err != nil {
+		return nil, err
+	}
+
+	pstrlen := uint8(buf[0])
+	if pstrlen != uint8(len(HandshakeDefaultPstr)) {
+		return nil, fmt.Errorf("pstrlen unexpected value: %d", pstrlen)
+	}
+
+	pstr := string(buf[1 : pstrlen+1])
+	if pstr != HandshakeDefaultPstr {
+		return nil, fmt.Errorf("pstr unexpected value: %s", pstr)
+	}
+
+	reserved := [8]byte(buf[pstrlen+1 : pstrlen+9])
+	infoHash := [20]byte(buf[pstrlen+9 : pstrlen+29])
+	peerId := [20]byte(buf[pstrlen+29 : pstrlen+49])
+
+	return &Handshake{
+		Pstr:     pstr,
+		Reserved: reserved,
+		InfoHash: infoHash,
+		PeerID:   peerId,
+	}, nil
 }
-
-

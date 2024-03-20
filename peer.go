@@ -38,10 +38,10 @@ func NewPeer(conn net.Conn) *Peer {
 }
 
 func (p *Peer) Handshake(hash, clientID [20]byte) error {
-	hs := handshake.New(hash, clientID)
-	handshake.Write(p.conn, hs)
+	hs := handshake.NewHandshake(hash, clientID)
+	p.conn.Write(hs.Marshal())
 
-	hs, err := handshake.Read(p.conn)
+	hs, err := handshake.UnmarshalHandshake(p.conn)
 	if err != nil {
 		return err
 	}
