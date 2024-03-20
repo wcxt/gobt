@@ -55,19 +55,36 @@ func (msg *Message) String() string {
 	return stringMap[msg.ID]
 }
 
-func Read(r io.Reader) (*Message, error) {
+func (msg *Message) Marshal() []byte {
+	var buf bytes.Buffer
+
+	binary.Write(&buf, binary.BigEndian, msg.Len())
+
+	if msg.KeepAlive {
+		return buf.Bytes()
+	}
+
+	buf.WriteByte(byte(msg.ID))
+	buf.Write(msg.Payload)
+	return buf.Bytes()
+
+}
+
+func UnmarshalMessage(r io.Reader) (*Message, error) {
 	buf := make([]byte, 4)
+
 	_, err := io.ReadFull(r, buf)
 	if err != nil {
 		return nil, err
 	}
 
-	msglen := binary.BigEndian.Uint32(buf[0:4])
-	if msglen == 0 {
+	msgLength := binary.BigEndian.Uint32(buf[0:4])
+	if msgLength == 0 {
 		return &Message{KeepAlive: true}, nil
 	}
 
-	buf = make([]byte, msglen)
+	buf = make([]byte, msgLength)
+
 	_, err = io.ReadFull(r, buf)
 	if err != nil {
 		return nil, err
@@ -77,17 +94,4 @@ func Read(r io.Reader) (*Message, error) {
 	payload := Payload(buf[1:])
 
 	return &Message{ID: id, Payload: payload}, nil
-}
-
-func Write(w io.Writer, msg *Message) (int, error) {
-	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, msg.Len())
-
-	if msg.KeepAlive {
-		return w.Write(buf.Bytes())
-	}
-
-	buf.WriteByte(byte(msg.ID))
-	buf.Write(msg.Payload)
-	return w.Write(buf.Bytes())
 }

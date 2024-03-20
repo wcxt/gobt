@@ -5,12 +5,20 @@ import (
 	"encoding/binary"
 )
 
-type Bitfield []byte
-
 type Request struct {
 	Index  uint32
 	Offset uint32
 	Length uint32
+}
+
+func (r *Request) Marshal() []byte {
+	var buf bytes.Buffer
+
+	binary.Write(&buf, binary.BigEndian, r.Index)
+	binary.Write(&buf, binary.BigEndian, r.Offset)
+	binary.Write(&buf, binary.BigEndian, r.Length)
+
+	return buf.Bytes()
 }
 
 type Block struct {
@@ -19,41 +27,32 @@ type Block struct {
 	Block  []byte
 }
 
-type Payload []byte
-
-func NewBitfieldPayload(bitfield Bitfield) Payload {
-	return Payload(bitfield)
-}
-
-func NewRequestPayload(request Request) Payload {
+func (b *Block) Marshal() []byte {
 	var buf bytes.Buffer
 
-	binary.Write(&buf, binary.BigEndian, request.Index)
-	binary.Write(&buf, binary.BigEndian, request.Offset)
-	binary.Write(&buf, binary.BigEndian, request.Length)
+	binary.Write(&buf, binary.BigEndian, b.Index)
+	binary.Write(&buf, binary.BigEndian, b.Offset)
+	buf.Write(b.Block)
 
-	return Payload(buf.Bytes())
+	return buf.Bytes()
 }
 
-func NewBlockPayload(block Block) Payload {
-    var buf bytes.Buffer
+type Have uint32
 
-	binary.Write(&buf, binary.BigEndian, block.Index)
-	binary.Write(&buf, binary.BigEndian, block.Offset)
-    buf.Write(block.Block)
+func (h Have) Marshal() []byte {
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.BigEndian, h)
 
-	return Payload(buf.Bytes())
+	return buf.Bytes()
 }
+
+type Payload []byte
 
 func NewHavePayload(index uint32) Payload {
-    var buf bytes.Buffer
-    binary.Write(&buf, binary.BigEndian, index)
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.BigEndian, index)
 
-    return Payload(buf.Bytes())
-}
-
-func (p Payload) Bitfield() Bitfield {
-	return Bitfield(p)
+	return Payload(buf.Bytes())
 }
 
 func (p Payload) Request() Request {
@@ -65,14 +64,13 @@ func (p Payload) Request() Request {
 }
 
 func (p Payload) Block() Block {
-    index := binary.BigEndian.Uint32(p[0:4])
+	index := binary.BigEndian.Uint32(p[0:4])
 	offset := binary.BigEndian.Uint32(p[4:8])
-    block := p[8:]
+	block := p[8:]
 
-    return Block{Index: index, Offset: offset, Block: block}
+	return Block{Index: index, Offset: offset, Block: block}
 }
 
 func (p Payload) Have() uint32 {
-    return binary.BigEndian.Uint32(p[0:4])
+	return binary.BigEndian.Uint32(p[0:4])
 }
-

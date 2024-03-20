@@ -25,7 +25,7 @@ func TestWriteMessage(t *testing.T) {
 			err:   false,
 		},
 		"with payload": {
-			input: &message.Message{ID: message.IDBitfield, Payload: message.NewBitfieldPayload(message.Bitfield([]byte{10, 15, 5}))},
+			input: &message.Message{ID: message.IDBitfield, Payload: []byte{10, 15, 5}},
 			want:  []byte{0, 0, 0, 4, 5, 10, 15, 5},
 			err:   false,
 		},
@@ -34,7 +34,7 @@ func TestWriteMessage(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
-			_, err := message.Write(&buf, test.input)
+			_, err := buf.Write(test.input.Marshal())
 			got := buf.Bytes()
 
 			if !test.err && err != nil {
@@ -68,7 +68,7 @@ func TestReadMessage(t *testing.T) {
 		},
 		"with payload": {
 			input: []byte{0, 0, 0, 4, 5, 10, 15, 5},
-			want:  &message.Message{ID: message.IDBitfield, Payload: message.NewBitfieldPayload(message.Bitfield([]byte{10, 15, 5}))},
+			want:  &message.Message{ID: message.IDBitfield, Payload: []byte{10, 15, 5}},
 			err:   false,
 		},
 		"zero bytes":        {input: []byte{}, want: nil, err: true},
@@ -79,7 +79,7 @@ func TestReadMessage(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			r := bytes.NewReader(test.input)
-			msg, err := message.Read(r)
+			msg, err := message.UnmarshalMessage(r)
 
 			if !test.err && err != nil {
 				t.Fatalf("got error: %s, want nil", err.Error())

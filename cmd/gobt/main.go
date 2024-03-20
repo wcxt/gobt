@@ -255,7 +255,7 @@ func main() {
 					}
 				case message.IDBitfield:
 					// Define peer bitfield
-					err := bf.Replace(msg.Payload.Bitfield())
+					err := bf.Replace(msg.Payload)
 					if err != nil {
 						fmt.Printf("Bitfield: %v\n", err)
 						return

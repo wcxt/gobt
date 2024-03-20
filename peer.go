@@ -119,10 +119,9 @@ func (p *Peer) RecvRequest(index, offset, length int) error {
 func (p *Peer) SendRequest(index, offset, length int) error {
 	req := message.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
 	fmt.Printf("%s WRITE REQUEST: %d %d %d\n", p.conn.RemoteAddr().String(), index, offset, length)
-	payload := message.NewRequestPayload(req)
 
 	p.Requests = append(p.Requests, []int{index, offset / MaxBlockLength, length})
-	_, err := p.WriteMsg(message.IDRequest, payload)
+	_, err := p.WriteMsg(message.IDRequest, req.Marshal())
 	if err != nil {
 		return err
 	}
@@ -133,9 +132,8 @@ func (p *Peer) SendRequest(index, offset, length int) error {
 func (p *Peer) SendCancel(index, offset, length int) error {
 	req := message.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
 	fmt.Printf("%s WRITE CANCEL: %d %d %d\n", p.conn.RemoteAddr().String(), index, offset, length)
-	payload := message.NewRequestPayload(req)
 
-	_, err := p.WriteMsg(message.IDCancel, payload)
+	_, err := p.WriteMsg(message.IDCancel, req.Marshal())
 	if err != nil {
 		return err
 	}
@@ -163,7 +161,7 @@ func (p *Peer) IsRequestable() bool {
 }
 
 func (p *Peer) ReadMsg() (*message.Message, error) {
-	msg, err := message.Read(p.conn)
+	msg, err := message.UnmarshalMessage(p.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -175,9 +173,9 @@ func (p *Peer) ReadMsg() (*message.Message, error) {
 	return msg, nil
 }
 
-func (p *Peer) WriteMsg(id message.ID, payload message.Payload) (int, error) {
+func (p *Peer) WriteMsg(id message.ID, payload []byte) (int, error) {
 	nmsg := &message.Message{ID: id, Payload: payload}
-	wb, err := message.Write(p.conn, nmsg)
+	wb, err := p.conn.Write(nmsg.Marshal())
 	if err != nil {
 		return wb, err
 	}
@@ -192,7 +190,7 @@ func (p *Peer) WriteMsg(id message.ID, payload message.Payload) (int, error) {
 
 func (p *Peer) WriteKeepAlive() (int, error) {
 	nmsg := &message.Message{KeepAlive: true}
-	return message.Write(p.conn, nmsg)
+	return p.conn.Write(nmsg.Marshal())
 }
 
 func (p *Peer) WriteUnchoke() (int, error) {
