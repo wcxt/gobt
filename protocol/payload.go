@@ -1,4 +1,4 @@
-package message
+package protocol
 
 import (
 	"bytes"
@@ -47,13 +47,6 @@ func (h Have) Marshal() []byte {
 }
 
 type Payload []byte
-
-func NewHavePayload(index uint32) Payload {
-	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, index)
-
-	return Payload(buf.Bytes())
-}
 
 func (p Payload) Request() Request {
 	index := binary.BigEndian.Uint32(p[0:4])

@@ -1,4 +1,4 @@
-package handshake
+package protocol
 
 import (
 	"bytes"

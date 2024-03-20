@@ -1,4 +1,4 @@
-package message
+package protocol
 
 import (
 	"bytes"
@@ -6,10 +6,10 @@ import (
 	"io"
 )
 
-type ID uint8
+type MessageID uint8
 
 const (
-	IDChoke ID = iota
+	IDChoke MessageID = iota
 	IDUnchoke
 	IDInterested
 	IDNotInterested
@@ -21,7 +21,7 @@ const (
 	IDPort
 )
 
-var stringMap = map[ID]string{
+var stringMap = map[MessageID]string{
 	IDChoke:         "CHOKE",
 	IDUnchoke:       "UNCHOKE",
 	IDInterested:    "INTERESTED",
@@ -36,7 +36,7 @@ var stringMap = map[ID]string{
 
 type Message struct {
 	KeepAlive bool
-	ID        ID
+	ID        MessageID
 	Payload   Payload
 }
 
@@ -90,7 +90,7 @@ func UnmarshalMessage(r io.Reader) (*Message, error) {
 		return nil, err
 	}
 
-	id := ID(buf[0])
+	id := MessageID(buf[0])
 	payload := Payload(buf[1:])
 
 	return &Message{ID: id, Payload: payload}, nil

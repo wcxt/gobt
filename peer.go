@@ -6,8 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/edwces/gobt/handshake"
-	"github.com/edwces/gobt/message"
+	"github.com/edwces/gobt/protocol"
 )
 
 const (
@@ -38,10 +37,10 @@ func NewPeer(conn net.Conn) *Peer {
 }
 
 func (p *Peer) Handshake(hash, clientID [20]byte) error {
-	hs := handshake.NewHandshake(hash, clientID)
+	hs := protocol.NewHandshake(hash, clientID)
 	p.conn.Write(hs.Marshal())
 
-	hs, err := handshake.UnmarshalHandshake(p.conn)
+	hs, err := protocol.UnmarshalHandshake(p.conn)
 	if err != nil {
 		return err
 	}
@@ -72,7 +71,7 @@ func (p *Peer) SetWriteKeepAlive(period time.Duration) {
 }
 
 func (p *Peer) SendInterested() error {
-	_, err := p.WriteMsg(message.IDInterested, nil)
+	_, err := p.WriteMsg(protocol.IDInterested, nil)
 	if err != nil {
 		return nil
 	}
@@ -82,7 +81,7 @@ func (p *Peer) SendInterested() error {
 }
 
 func (p *Peer) SendNotInterested() error {
-	_, err := p.WriteMsg(message.IDNotInterested, nil)
+	_, err := p.WriteMsg(protocol.IDNotInterested, nil)
 	if err != nil {
 		return nil
 	}
@@ -117,11 +116,11 @@ func (p *Peer) RecvRequest(index, offset, length int) error {
 }
 
 func (p *Peer) SendRequest(index, offset, length int) error {
-	req := message.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
+	req := protocol.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
 	fmt.Printf("%s WRITE REQUEST: %d %d %d\n", p.conn.RemoteAddr().String(), index, offset, length)
 
 	p.Requests = append(p.Requests, []int{index, offset / MaxBlockLength, length})
-	_, err := p.WriteMsg(message.IDRequest, req.Marshal())
+	_, err := p.WriteMsg(protocol.IDRequest, req.Marshal())
 	if err != nil {
 		return err
 	}
@@ -130,10 +129,10 @@ func (p *Peer) SendRequest(index, offset, length int) error {
 }
 
 func (p *Peer) SendCancel(index, offset, length int) error {
-	req := message.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
+	req := protocol.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
 	fmt.Printf("%s WRITE CANCEL: %d %d %d\n", p.conn.RemoteAddr().String(), index, offset, length)
 
-	_, err := p.WriteMsg(message.IDCancel, req.Marshal())
+	_, err := p.WriteMsg(protocol.IDCancel, req.Marshal())
 	if err != nil {
 		return err
 	}
@@ -160,8 +159,8 @@ func (p *Peer) IsRequestable() bool {
 	return len(p.Requests) < MaxRequestCountPerPeer && p.IsInteresting
 }
 
-func (p *Peer) ReadMsg() (*message.Message, error) {
-	msg, err := message.UnmarshalMessage(p.conn)
+func (p *Peer) ReadMsg() (*protocol.Message, error) {
+	msg, err := protocol.UnmarshalMessage(p.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -173,15 +172,15 @@ func (p *Peer) ReadMsg() (*message.Message, error) {
 	return msg, nil
 }
 
-func (p *Peer) WriteMsg(id message.ID, payload []byte) (int, error) {
-	nmsg := &message.Message{ID: id, Payload: payload}
+func (p *Peer) WriteMsg(id protocol.MessageID, payload []byte) (int, error) {
+	nmsg := &protocol.Message{ID: id, Payload: payload}
 	wb, err := p.conn.Write(nmsg.Marshal())
 	if err != nil {
 		return wb, err
 	}
 	p.writeKeepAliveTicker.Reset(p.writeKeepAlivePeriod)
 
-	if nmsg.ID != message.IDRequest {
+	if nmsg.ID != protocol.IDRequest {
 		fmt.Printf("%s WRITE: %s\n", p.conn.RemoteAddr().String(), nmsg.String())
 	}
 
@@ -189,17 +188,17 @@ func (p *Peer) WriteMsg(id message.ID, payload []byte) (int, error) {
 }
 
 func (p *Peer) WriteKeepAlive() (int, error) {
-	nmsg := &message.Message{KeepAlive: true}
+	nmsg := &protocol.Message{KeepAlive: true}
 	return p.conn.Write(nmsg.Marshal())
 }
 
 func (p *Peer) WriteUnchoke() (int, error) {
-	return p.WriteMsg(message.IDUnchoke, nil)
+	return p.WriteMsg(protocol.IDUnchoke, nil)
 }
 
 func (p *Peer) WriteHave(index int) (int, error) {
-	payload := message.NewHavePayload(uint32(index))
-	return p.WriteMsg(message.IDHave, payload)
+	payload := protocol.Have(index).Marshal()
+	return p.WriteMsg(protocol.IDHave, payload)
 }
 
 func (p *Peer) String() string {

@@ -1,18 +1,18 @@
-package message_test
+package protocol_test
 
 import (
 	"bytes"
 	"reflect"
 	"testing"
 
-	"github.com/edwces/gobt/message"
+	"github.com/edwces/gobt/protocol"
 )
 
 func TestRequestMarshal(t *testing.T) {
-	req := message.Request{Index: 1467, Offset: 64000, Length: 16000}
+	req := protocol.Request{Index: 1467, Offset: 64000, Length: 16000}
 
 	got := req.Marshal()
-	want := message.Payload{0x00, 0x00, 0x05, 0xBB,
+	want := protocol.Payload{0x00, 0x00, 0x05, 0xBB,
 		0x00, 0x00, 0xFA, 0x00,
 		0x00, 0x00, 0x3E, 0x80}
 
@@ -22,12 +22,12 @@ func TestRequestMarshal(t *testing.T) {
 }
 
 func TestPayloadRequest(t *testing.T) {
-	payload := message.Payload{0x00, 0x00, 0x05, 0xBB,
+	payload := protocol.Payload{0x00, 0x00, 0x05, 0xBB,
 		0x00, 0x00, 0xFA, 0x00,
 		0x00, 0x00, 0x3E, 0x80}
 
 	got := payload.Request()
-	want := message.Request{Index: 1467, Offset: 64000, Length: 16000}
+	want := protocol.Request{Index: 1467, Offset: 64000, Length: 16000}
 
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %#v, want %#v", got, want)
@@ -35,10 +35,10 @@ func TestPayloadRequest(t *testing.T) {
 }
 
 func TestBlockMarshal(t *testing.T) {
-	block := message.Block{Index: 1467, Offset: 64000, Block: []byte{0x00, 0xE2, 0x06, 0xAB, 0x00, 0x31}}
+	block := protocol.Block{Index: 1467, Offset: 64000, Block: []byte{0x00, 0xE2, 0x06, 0xAB, 0x00, 0x31}}
 
 	got := block.Marshal()
-	want := message.Payload{0x00, 0x00, 0x05, 0xBB,
+	want := protocol.Payload{0x00, 0x00, 0x05, 0xBB,
 		0x00, 0x00, 0xFA, 0x00,
 		0x00, 0xE2, 0x06, 0xAB, 0x00, 0x31}
 
@@ -48,12 +48,12 @@ func TestBlockMarshal(t *testing.T) {
 }
 
 func TestPayloadBlock(t *testing.T) {
-	payload := message.Payload{0x00, 0x00, 0x05, 0xBB,
+	payload := protocol.Payload{0x00, 0x00, 0x05, 0xBB,
 		0x00, 0x00, 0xFA, 0x00,
 		0x00, 0xE2, 0x06, 0xAB, 0x00, 0x31}
 
 	got := payload.Block()
-	want := message.Block{Index: 1467, Offset: 64000, Block: []byte{0x00, 0xE2, 0x06, 0xAB, 0x00, 0x31}}
+	want := protocol.Block{Index: 1467, Offset: 64000, Block: []byte{0x00, 0xE2, 0x06, 0xAB, 0x00, 0x31}}
 
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %#v, want %#v", got, want)
@@ -61,10 +61,10 @@ func TestPayloadBlock(t *testing.T) {
 }
 
 func TestHaveMarshal(t *testing.T) {
-	have := message.Have(1467)
+	have := protocol.Have(1467)
 
 	got := have.Marshal()
-	want := message.Payload{0x00, 0x00, 0x05, 0xBB}
+	want := protocol.Payload{0x00, 0x00, 0x05, 0xBB}
 
 	if !bytes.Equal(got, want) {
 		t.Fatalf("got %#v, want %#v", got, want)
@@ -72,7 +72,7 @@ func TestHaveMarshal(t *testing.T) {
 }
 
 func TestPayloadHave(t *testing.T) {
-	payload := message.Payload{0x00, 0x00, 0x05, 0xBB}
+	payload := protocol.Payload{0x00, 0x00, 0x05, 0xBB}
 
 	got := payload.Have()
 	want := uint32(1467)

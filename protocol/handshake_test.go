@@ -1,17 +1,17 @@
-package handshake_test
+package protocol_test
 
 import (
 	"bytes"
 	"reflect"
 	"testing"
 
-	"github.com/edwces/gobt/handshake"
+	"github.com/edwces/gobt/protocol"
 )
 
-func TestWriteHandshake(t *testing.T) {
+func TestMarshalHandshake(t *testing.T) {
 	infoHash := [20]byte{20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}
 	peerId := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-	hs := handshake.NewHandshake(infoHash, peerId)
+	hs := protocol.NewHandshake(infoHash, peerId)
 
 	want := []byte{19, 66, 105, 116, 84, 111, 114, 114, 101, 110, 116, 32, 112, 114, 111, 116,
 		111, 99, 111, 108, 0, 0, 0, 0, 0, 0, 0, 0, 20, 19, 18, 17, 16, 15, 14, 13,
@@ -28,10 +28,10 @@ func TestWriteHandshake(t *testing.T) {
 	}
 }
 
-func TestReadHandshake(t *testing.T) {
+func TestUnmarshalHandshake(t *testing.T) {
 	tests := map[string]struct {
 		input []byte
-		want  *handshake.Handshake
+		want  *protocol.Handshake
 		err   bool
 	}{
 		"handshake": {
@@ -39,7 +39,7 @@ func TestReadHandshake(t *testing.T) {
 				111, 99, 111, 108, 0, 0, 0, 0, 0, 0, 0, 0, 20, 19, 18, 17, 16, 15, 14, 13,
 				12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
 				13, 14, 15, 16, 17, 18, 19, 20},
-			want: handshake.NewHandshake(
+			want: protocol.NewHandshake(
 				[20]byte{20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
 				[20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
 			),
@@ -68,7 +68,7 @@ func TestReadHandshake(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			r := bytes.NewReader(test.input)
-			hs, err := handshake.UnmarshalHandshake(r)
+			hs, err := protocol.UnmarshalHandshake(r)
 			if !test.err && err != nil {
 				t.Fatalf("got error: %s, want nil", err.Error())
 			}

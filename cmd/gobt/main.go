@@ -12,7 +12,7 @@ import (
 
 	"github.com/edwces/gobt"
 	"github.com/edwces/gobt/bitfield"
-	"github.com/edwces/gobt/message"
+	"github.com/edwces/gobt/protocol"
 )
 
 const (
@@ -134,9 +134,9 @@ func main() {
 				}
 
 				switch msg.ID {
-				case message.IDChoke:
+				case protocol.IDChoke:
 					peer.IsChoking = true
-				case message.IDPiece:
+				case protocol.IDPiece:
 					block := msg.Payload.Block()
 
 					err := peer.RecvRequest(int(block.Index), int(block.Offset), len(block.Block))
@@ -197,7 +197,7 @@ func main() {
 						}
 					}
 
-				case message.IDUnchoke:
+				case protocol.IDUnchoke:
 
 					unresolved := [][]int{}
 					if peer.IsChoking {
@@ -235,7 +235,7 @@ func main() {
 					}
 
 					peer.IsChoking = false
-				case message.IDHave:
+				case protocol.IDHave:
 					have := int(msg.Payload.Have())
 					err := bf.Set(have)
 
@@ -253,7 +253,7 @@ func main() {
 							return
 						}
 					}
-				case message.IDBitfield:
+				case protocol.IDBitfield:
 					// Define peer bitfield
 					err := bf.Replace(msg.Payload)
 					if err != nil {
