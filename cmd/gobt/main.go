@@ -157,7 +157,7 @@ func main() {
 						if storage.Verify(int(block.Index), hashes[block.Index]) {
 							pCount++
 							clientBf.Set(int(block.Index))
-							fmt.Printf("-------------------------------------------------- %s GOT: %d; DONE: %d \n", announcePeer.Addr(), block.Index, pCount)
+							fmt.Printf("%s GOT PIECE: %d; [%d / %d] \n", announcePeer.Addr(), block.Index, pCount, len(hashes))
 							file.WriteAt(storage.GetPieceData(int(block.Index)), int64(int(block.Index)*metainfo.Info.PieceLength))
 
 							connected.WriteHave(int(block.Index), peer.String())
@@ -166,7 +166,6 @@ func main() {
 								connected.Disconnect()
 							}
 						} else {
-							fmt.Printf("-------------------------------------------------- %s GOT FAILED: %d; \n", announcePeer.Addr(), block.Index)
 							pp.FailPendingPiece(int(block.Index))
 							peer.HashFails += 1
 							if peer.HashFails >= gobt.MaxHashFails {

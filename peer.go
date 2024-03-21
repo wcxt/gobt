@@ -113,7 +113,6 @@ func (p *Peer) RecvRequest(index, offset, length int) error {
 
 func (p *Peer) SendRequest(index, offset, length int) error {
 	req := protocol.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
-	fmt.Printf("%s WRITE REQUEST: %d %d %d\n", p.conn.RemoteAddr().String(), index, offset, length)
 
 	p.Requests = append(p.Requests, []int{index, offset / MaxBlockLength, length})
 	_, err := p.WriteMsg(protocol.IDRequest, req.Marshal())
@@ -126,7 +125,6 @@ func (p *Peer) SendRequest(index, offset, length int) error {
 
 func (p *Peer) SendCancel(index, offset, length int) error {
 	req := protocol.Request{Index: uint32(index), Offset: uint32(offset), Length: uint32(length)}
-	fmt.Printf("%s WRITE CANCEL: %d %d %d\n", p.conn.RemoteAddr().String(), index, offset, length)
 
 	_, err := p.WriteMsg(protocol.IDCancel, req.Marshal())
 	if err != nil {
@@ -163,7 +161,7 @@ func (p *Peer) ReadMsg() (*protocol.Message, error) {
 
 	p.conn.SetReadDeadline(time.Time{})
 
-	fmt.Printf("%s READ: %s\n", p.conn.RemoteAddr().String(), msg.String())
+	// fmt.Printf("%s READ: %s\n", p.conn.RemoteAddr().String(), msg.String())
 
 	return msg, nil
 }
@@ -176,9 +174,7 @@ func (p *Peer) WriteMsg(id protocol.MessageID, payload []byte) (int, error) {
 	}
 	p.keepAliveTicker.Reset(p.keepAlivePeriod)
 
-	if nmsg.ID != protocol.IDRequest {
-		fmt.Printf("%s WRITE: %s\n", p.conn.RemoteAddr().String(), nmsg.String())
-	}
+	// fmt.Printf("%s WRITE: %s\n", p.conn.RemoteAddr().String(), nmsg.String())
 
 	return wb, nil
 }
