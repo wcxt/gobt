@@ -14,10 +14,6 @@ const (
 	MaxHashFails           = 15
 )
 
-// NOTES: This module will be probably be one of the higher level and will
-// be responsible for handling most of the logic for messages. Thus he will need
-// to have access torrent size, piece size etc.; piece state; and overral most of the modules
-// REFACTOR: Messy for now, Leaking most of the information about peer
 type Peer struct {
 	conn net.Conn
 
@@ -28,8 +24,8 @@ type Peer struct {
 	Cancelled [][]int
 	HashFails int
 
-	writeKeepAlivePeriod time.Duration
-	writeKeepAliveTicker *time.Ticker
+	keepAlivePeriod time.Duration
+	keepAliveTicker *time.Ticker
 }
 
 func NewPeer(conn net.Conn) *Peer {
@@ -52,16 +48,16 @@ func (p *Peer) Handshake(hash, clientID [20]byte) error {
 	return nil
 }
 
-func (p *Peer) SetReadKeepAlive(period time.Duration) {
+func (p *Peer) SetReadDeadline(period time.Duration) {
 	p.conn.SetReadDeadline(time.Now().Add(period))
 }
 
-func (p *Peer) SetWriteKeepAlive(period time.Duration) {
-	p.writeKeepAlivePeriod = period
-	p.writeKeepAliveTicker = time.NewTicker(p.writeKeepAlivePeriod)
+func (p *Peer) KeepAlive(period time.Duration) {
+	p.keepAlivePeriod = period
+	p.keepAliveTicker = time.NewTicker(p.keepAlivePeriod)
 
 	go func() {
-		for range p.writeKeepAliveTicker.C {
+		for range p.keepAliveTicker.C {
 			_, err := p.WriteKeepAlive()
 			if err != nil {
 				p.Close()
@@ -178,7 +174,7 @@ func (p *Peer) WriteMsg(id protocol.MessageID, payload []byte) (int, error) {
 	if err != nil {
 		return wb, err
 	}
-	p.writeKeepAliveTicker.Reset(p.writeKeepAlivePeriod)
+	p.keepAliveTicker.Reset(p.keepAlivePeriod)
 
 	if nmsg.ID != protocol.IDRequest {
 		fmt.Printf("%s WRITE: %s\n", p.conn.RemoteAddr().String(), nmsg.String())
@@ -206,8 +202,8 @@ func (p *Peer) String() string {
 }
 
 func (p *Peer) Close() error {
-	if p.writeKeepAliveTicker != nil {
-		p.writeKeepAliveTicker.Stop()
+	if p.keepAliveTicker != nil {
+		p.keepAliveTicker.Stop()
 	}
 	return p.conn.Close()
 }

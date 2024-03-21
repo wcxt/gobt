@@ -118,10 +118,10 @@ func main() {
 				wg.Done()
 			}()
 
-			peer.SetWriteKeepAlive(KeepAlivePeriod)
+			peer.KeepAlive(KeepAlivePeriod)
 
 			for {
-				peer.SetReadKeepAlive(MaxPeerTimeout)
+				peer.SetReadDeadline(MaxPeerTimeout)
 				msg, err := peer.ReadMsg()
 
 				if err != nil {
