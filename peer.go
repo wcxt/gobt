@@ -2,7 +2,6 @@ package gobt
 
 import (
 	"errors"
-	"fmt"
 	"net"
 	"time"
 
@@ -30,22 +29,6 @@ type Peer struct {
 
 func NewPeer(conn net.Conn) *Peer {
 	return &Peer{conn: conn, IsInteresting: false, IsChoking: true, Requests: [][]int{}, Cancelled: [][]int{}, HashFails: 0}
-}
-
-func (p *Peer) Handshake(hash, clientID [20]byte) error {
-	hs := protocol.NewHandshake(hash, clientID)
-	p.conn.Write(hs.Marshal())
-
-	hs, err := protocol.UnmarshalHandshake(p.conn)
-	if err != nil {
-		return err
-	}
-
-	if hs.InfoHash != hash {
-		return fmt.Errorf("InfoHash unexpected value: %s", hs.InfoHash)
-	}
-
-	return nil
 }
 
 func (p *Peer) SetReadDeadline(period time.Duration) {

@@ -97,9 +97,9 @@ func main() {
 			peer := gobt.NewPeer(conn)
 			defer peer.Close()
 
-			err = peer.Handshake(hash, clientID)
+			err = gobt.Handshake(conn, hash, clientID)
 			if err != nil {
-				fmt.Printf("handshake error: %v\n", err)
+				fmt.Printf("handshake: %v\n", err)
 				wg.Done()
 				return
 			}
